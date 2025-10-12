@@ -7,7 +7,7 @@ This document provides rules and guidelines for Cline (the AI assistant) to foll
 - Implement features in the following order to ensure a solid foundation:
   1. Photo import from device/gallery/camera.
   2. User account system for login, sync, and personalization.
-  3. Hybrid storage setup (local + cloud sync).
+  3. Hybrid storage setup (local + NAS sync).
   4. Automatic categorization by date, location, or content.
   5. Metadata management and geotagging integration.
   6. Split-view mode for RAW/JPEG pairs.
@@ -24,8 +24,8 @@ This document provides rules and guidelines for Cline (the AI assistant) to foll
   - Store phone GPS location separately if photo lacks embedded GPS, with timestamp alignment.
 - **Storage and Sync:**
   - Use local storage (e.g., AsyncStorage or local databases like SQLite) for offline access.
-  - Integrate cloud providers (e.g., Firebase for simplicity and cross-platform support) for sync.
-  - Ensure data privacy: encrypt sensitive data and comply with GDPR/CCPA.
+  - Integrate with user's own NAS (Network Attached Storage) setup for synchronization, using protocols such as SMB, NFS, or custom APIs. Allow users to configure NAS endpoint and authentication.
+  - Ensure data privacy: encrypt sensitive data and comply with GDPR/CCPA when transferring to NAS.
 - **UI/UX Standards:**
   - Follow Material Design principles for Android and Apple Human Interface Guidelines for iOS within the cross-platform framework.
   - Ensure split-view is intuitive: swipe or tap to select, with visual indicators for pairing.

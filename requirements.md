@@ -16,7 +16,7 @@ This document outlines the gathered requirements for the photo management mobile
 - Automatic categorization of photos by date, location, or content.
 
 ### Storage
-- Hybrid storage: Local storage on the device with cloud synchronization capabilities.
+- Hybrid storage: Local storage on the device with synchronization to user's own NAS (Network Attached Storage) setup.
 
 ### User Management
 - User accounts: Single account per user for login, synchronization, and personalization across devices.
