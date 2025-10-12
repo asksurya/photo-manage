@@ -1,0 +1,59 @@
+export interface Photo {
+  id: string;
+  uri: string;
+  filename: string;
+  type: string;
+  size: number;
+  width?: number;
+  height?: number;
+  timestamp: Date;
+  exif?: {
+    DateTimeOriginal?: string;
+    GPSLatitude?: number;
+    GPSLongitude?: number;
+    GPSAltitude?: number;
+    Make?: string;
+    Model?: string;
+    [key: string]: any;
+  };
+}
+
+export interface PhotoPair {
+  id: string;
+  raw?: Photo;
+  jpeg?: Photo;
+  pairingKey: string; // Key used to identify matching RAW/JPEG pairs
+}
+
+export interface GalleryState {
+  photos: Photo[];
+  pairs: PhotoPair[];
+  selectedPhoto: Photo | null;
+  selectedPair: PhotoPair | null;
+  filters: {
+    category: 'all' | 'date' | 'location' | 'content';
+    viewMode: 'list' | 'split';
+  };
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  nasConfig?: NasConfig;
+}
+
+export interface NasConfig {
+  host: string;
+  port?: number;
+  username: string;
+  password: string;
+  useHttps?: boolean;
+  remotePath?: string;
+}
+
+export enum CategoryType {
+  DATE = 'date',
+  LOCATION = 'location',
+  CONTENT = 'content',
+}
