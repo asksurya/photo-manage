@@ -6,8 +6,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { PhotoPair } from '../types/photo';
 
 interface SplitViewProps {
@@ -22,33 +22,74 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
   const formatMetadata = (photo: typeof rawPhoto) => {
     if (!photo?.exif) return [];
 
-    const metadata = [];
-    if (photo.exif.Make) metadata.push(`Camera: ${photo.exif.Make} ${photo.exif.Model || ''}`);
+    const metadata: Array<{ icon: string; label: string; value: string }> = [];
+    
+    if (photo.exif.Make) {
+      metadata.push({
+        icon: '📷',
+        label: 'Camera',
+        value: `${photo.exif.Make} ${photo.exif.Model || ''}`,
+      });
+    }
+    
     if (photo.exif.DateTimeOriginal) {
-      metadata.push(`Date: ${new Date(photo.exif.DateTimeOriginal).toLocaleString()}`);
+      metadata.push({
+        icon: '🕒',
+        label: 'Captured',
+        value: new Date(photo.exif.DateTimeOriginal).toLocaleString(),
+      });
     }
+    
     if (photo.width && photo.height) {
-      metadata.push(`Resolution: ${photo.width} x ${photo.height}`);
+      metadata.push({
+        icon: '📐',
+        label: 'Resolution',
+        value: `${photo.width} × ${photo.height}`,
+      });
     }
+    
     if (photo.size) {
-      metadata.push(`File Size: ${(photo.size / 1024 / 1024).toFixed(2)} MB`);
+      metadata.push({
+        icon: '💾',
+        label: 'File Size',
+        value: `${(photo.size / 1024 / 1024).toFixed(2)} MB`,
+      });
     }
+    
     if (photo.exif.GPSLatitude && photo.exif.GPSLongitude) {
-      metadata.push(`Location: ${photo.exif.GPSLatitude.toFixed(4)}, ${photo.exif.GPSLongitude.toFixed(4)}`);
+      metadata.push({
+        icon: '📍',
+        label: 'Location',
+        value: `${photo.exif.GPSLatitude.toFixed(4)}, ${photo.exif.GPSLongitude.toFixed(4)}`,
+      });
     }
+    
     if (photo.exif.GPSAltitude) {
-      metadata.push(`Altitude: ${photo.exif.GPSAltitude.toFixed(1)}m`);
+      metadata.push({
+        icon: '⛰️',
+        label: 'Altitude',
+        value: `${photo.exif.GPSAltitude.toFixed(1)}m`,
+      });
     }
 
     return metadata;
   };
 
-  const renderPhotoSection = (photo: typeof rawPhoto, title: string) => {
+  const renderPhotoSection = (
+    photo: typeof rawPhoto,
+    title: string,
+    badgeColor: string
+  ) => {
     if (!photo) {
       return (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <View style={styles.emptyContainer}>
+        <View style={styles.photoSection}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.typeBadge, { backgroundColor: badgeColor }]}>
+              <Text style={styles.typeBadgeText}>{title}</Text>
+            </View>
+          </View>
+          <View style={styles.emptyPhotoContainer}>
+            <Text style={styles.emptyIcon}>📷</Text>
             <Text style={styles.emptyText}>No {title.toLowerCase()} available</Text>
           </View>
         </View>
@@ -58,36 +99,102 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
     const metadata = formatMetadata(photo);
 
     return (
-      <View style={styles.section}>
+      <View style={styles.photoSection}>
+        {/* Header with badge */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.filename}>{photo.filename}</Text>
+          <View style={[styles.typeBadge, { backgroundColor: badgeColor }]}>
+            <Text style={styles.typeBadgeText}>{title}</Text>
+          </View>
+          <Text style={styles.filename} numberOfLines={1}>
+            {photo.filename}
+          </Text>
         </View>
-        <Image source={{ uri: photo.uri }} style={styles.photo} resizeMode="contain" />
-        <View style={styles.metadataContainer}>
-          {metadata.map((item, index) => (
-            <Text key={index} style={styles.metadata}>{item}</Text>
-          ))}
+
+        {/* Photo */}
+        <View style={styles.photoContainer}>
+          <Image 
+            source={{ uri: photo.uri }} 
+            style={styles.photo} 
+            resizeMode="contain"
+          />
         </View>
+
+        {/* Metadata */}
+        {metadata.length > 0 && (
+          <View style={styles.metadataContainer}>
+            <Text style={styles.metadataTitle}>Details</Text>
+            {metadata.map((item, index) => (
+              <View key={index} style={styles.metadataRow}>
+                <Text style={styles.metadataIcon}>{item.icon}</Text>
+                <View style={styles.metadataContent}>
+                  <Text style={styles.metadataLabel}>{item.label}</Text>
+                  <Text style={styles.metadataValue}>{item.value}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backButtonText}>← Back</Text>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={onBack}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.backIcon}>←</Text>
+          <Text style={styles.backText}>Gallery</Text>
         </TouchableOpacity>
-        <View style={styles.headerTitle}>
-          <Text style={styles.title}>Split View</Text>
-          <Text style={styles.pairTitle}>{pair.pairingKey}</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Compare Photos</Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
+            {pair.pairingKey}
+          </Text>
         </View>
+        <View style={styles.headerRight} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
-        {renderPhotoSection(rawPhoto, 'RAW')}
-        {renderPhotoSection(jpegPhoto, 'JPEG')}
+      {/* Content */}
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Comparison Info Card */}
+        <View style={styles.infoCard}>
+          <Text style={styles.infoIcon}>🔍</Text>
+          <View style={styles.infoContent}>
+            <Text style={styles.infoTitle}>Side-by-Side Comparison</Text>
+            <Text style={styles.infoText}>
+              View and compare the RAW and JPEG versions of your photo
+            </Text>
+          </View>
+        </View>
+
+        {/* RAW Photo */}
+        {renderPhotoSection(rawPhoto, 'RAW', '#FF6B6B')}
+
+        {/* Divider */}
+        {rawPhoto && jpegPhoto && (
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerBadge}>
+              <Text style={styles.dividerText}>VS</Text>
+            </View>
+            <View style={styles.dividerLine} />
+          </View>
+        )}
+
+        {/* JPEG Photo */}
+        {renderPhotoSection(jpegPhoto, 'JPEG', '#51CF66')}
+
+        {/* Bottom spacing */}
+        <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -96,92 +203,214 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8F9FA',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#E9ECEF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
   },
   backButton: {
-    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingRight: 12,
   },
-  backButtonText: {
+  backIcon: {
+    fontSize: 24,
+    color: '#4A90E2',
+    marginRight: 4,
+  },
+  backText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: '#4A90E2',
+    fontWeight: '600',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  title: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
-  pairTitle: {
-    fontSize: 14,
-    color: '#666',
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#6C757D',
     marginTop: 2,
+  },
+  headerRight: {
+    width: 80,
   },
   content: {
     flex: 1,
   },
   scrollContent: {
-    paddingVertical: 16,
+    paddingBottom: 20,
   },
-  section: {
-    backgroundColor: '#fff',
+  infoCard: {
+    flexDirection: 'row',
+    backgroundColor: '#E3F2FD',
     marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 8,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  sectionHeader: {
+    marginTop: 16,
+    marginBottom: 8,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderRadius: 12,
+    alignItems: 'center',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  infoIcon: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  infoContent: {
+    flex: 1,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
     marginBottom: 4,
   },
-  filename: {
+  infoText: {
     fontSize: 14,
-    color: '#666',
+    color: '#6C757D',
+    lineHeight: 20,
   },
-  photo: {
+  photoSection: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F3F5',
+  },
+  typeBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  typeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  filename: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  photoContainer: {
+    backgroundColor: '#000000',
     width: '100%',
-    height: 300,
-  },
-  emptyContainer: {
-    height: 200,
+    aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  photo: {
+    width: '100%',
+    height: '100%',
+  },
+  emptyPhotoContainer: {
+    width: '100%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 12,
+    opacity: 0.5,
+  },
   emptyText: {
     fontSize: 16,
-    color: '#999',
+    color: '#ADB5BD',
+    fontWeight: '500',
   },
   metadataContainer: {
     padding: 16,
   },
-  metadata: {
+  metadataTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  metadataRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  metadataIcon: {
+    fontSize: 20,
+    marginRight: 12,
+    marginTop: 2,
+  },
+  metadataContent: {
+    flex: 1,
+  },
+  metadataLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6C757D',
+    marginBottom: 2,
+  },
+  metadataValue: {
+    fontSize: 15,
+    color: '#1A1A1A',
+    fontWeight: '500',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#E9ECEF',
+  },
+  dividerBadge: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginHorizontal: 12,
+  },
+  dividerText: {
+    color: '#FFFFFF',
     fontSize: 14,
-    color: '#333',
-    marginBottom: 4,
-    lineHeight: 20,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  bottomSpacing: {
+    height: 20,
   },
 });
 
