@@ -11,6 +11,9 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Modal,
+  TextInput,
+  Button,
 } from 'react-native';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -20,19 +23,31 @@ import MetadataService from '../services/MetadataService';
 import CategorizationService, { CategoryGroup } from '../services/CategorizationService';
 import SplitView from './SplitView';
 import { Photo, PhotoPair, CategoryType } from '../types/photo';
+import AlbumService from '../services/AlbumService';
+import { Album } from '../types/album';
+import AlbumView from './AlbumView';
+
+type ViewType = CategoryType | 'albums';
 
 const PhotoGallery: React.FC = () => {
   const [photos, setPhotos] = useState<Photo[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [isAlbumModalVisible, setAlbumModalVisible] = useState(false);
+  const [newAlbumName, setNewAlbumName] = useState('');
+  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
+  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+  const [isAlbumSelectionModalVisible, setAlbumSelectionModalVisible] = useState(false);
   const [pairs, setPairs] = useState<PhotoPair[]>([]);
   const [categories, setCategories] = useState<{ [key in CategoryType]: CategoryGroup[] } | null>(null);
   const [selectedPair, setSelectedPair] = useState<PhotoPair | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<CategoryType>(CategoryType.DATE);
+  const [selectedCategory, setSelectedCategory] = useState<ViewType>(CategoryType.DATE);
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'split'>('list');
 
   useEffect(() => {
     requestPermissions();
     loadPhotos();
+    loadAlbums();
   }, []);
 
   useEffect(() => {
@@ -86,6 +101,39 @@ const PhotoGallery: React.FC = () => {
       Alert.alert('Error', 'Failed to load photos. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadAlbums = async () => {
+    const loadedAlbums = await AlbumService.getAlbums();
+    setAlbums(loadedAlbums);
+  };
+
+  const handleCreateAlbum = async () => {
+    if (newAlbumName.trim() === '') {
+      Alert.alert('Error', 'Album name cannot be empty');
+      return;
+    }
+    const newAlbum = await AlbumService.createAlbum(newAlbumName);
+    setAlbums([...albums, newAlbum]);
+    setNewAlbumName('');
+    setAlbumModalVisible(false);
+  };
+
+  const handleDeleteAlbum = async (albumId: string) => {
+    await AlbumService.deleteAlbum(albumId);
+    loadAlbums();
+  };
+
+  const handleRemovePhotoFromAlbum = async (photoId: string) => {
+    if (selectedAlbum) {
+      await AlbumService.removePhotoFromAlbum(selectedAlbum.id, photoId);
+      const updatedAlbum = {
+        ...selectedAlbum,
+        photos: selectedAlbum.photos.filter(p => p.id !== photoId),
+      };
+      setSelectedAlbum(updatedAlbum);
+      loadAlbums();
     }
   };
 
@@ -147,10 +195,36 @@ const PhotoGallery: React.FC = () => {
     return <SplitView pair={selectedPair} onBack={handleBackFromSplitView} />;
   }
 
+  if (selectedAlbum) {
+    return (
+      <AlbumView
+        album={selectedAlbum}
+        onRemovePhoto={handleRemovePhotoFromAlbum}
+        onBack={() => setSelectedAlbum(null)}
+      />
+    );
+  }
+
+  const handleAddPhotoToAlbum = async (albumId: string) => {
+    if (selectedPhoto) {
+      await AlbumService.addPhotoToAlbum(albumId, selectedPhoto);
+      loadAlbums();
+      setAlbumSelectionModalVisible(false);
+    }
+  };
+
+  const openAlbumSelectionModal = (photo: Photo) => {
+    setSelectedPhoto(photo);
+    setAlbumSelectionModalVisible(true);
+  };
+
   const renderPhotoItem = ({ item }: { item: Photo }) => (
     <View style={styles.photoCard}>
       <Image source={{ uri: item.uri }} style={styles.photoImage} />
       <View style={styles.photoInfo}>
+        <TouchableOpacity onPress={() => openAlbumSelectionModal(item)}>
+          <Text style={styles.addToAlbumButton}>+ Add to Album</Text>
+        </TouchableOpacity>
         <Text style={styles.photoName} numberOfLines={1}>
           {item.filename}
         </Text>
@@ -245,14 +319,58 @@ const PhotoGallery: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isAlbumSelectionModalVisible}
+        onRequestClose={() => setAlbumSelectionModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Select Album</Text>
+            <FlatList
+              data={albums}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity onPress={() => handleAddPhotoToAlbum(item.id)}>
+                  <Text style={styles.albumSelectItem}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+            />
+            <Button title="Cancel" onPress={() => setAlbumSelectionModalVisible(false)} />
+          </View>
+        </view>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isAlbumModalVisible}
+        onRequestClose={() => setAlbumModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Create New Album</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Album Name"
+              value={newAlbumName}
+              onChangeText={setNewAlbumName}
+            />
+            <Button title="Create" onPress={handleCreateAlbum} />
+            <Button title="Cancel" onPress={() => setAlbumModalVisible(false)} />
+          </View>
+        </View>
+      </Modal>
+
       {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Photo Manage</Text>
           <Text style={styles.subtitle}>{photos.length} photo{photos.length !== 1 ? 's' : ''}</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.importButton} 
+        <TouchableOpacity
+          style={styles.importButton}
           onPress={importPhotos}
           disabled={isLoading}
         >
@@ -263,8 +381,8 @@ const PhotoGallery: React.FC = () => {
 
       {/* Category Tabs */}
       <View style={styles.tabsContainer}>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabsScroll}
         >
@@ -298,7 +416,18 @@ const PhotoGallery: React.FC = () => {
               🏷️
             </Text>
             <Text style={[styles.tabText, selectedCategory === CategoryType.CONTENT && styles.activeTabText]}>
-              By Content
+                By Content
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+            style={[styles.tab, selectedCategory === 'albums' && styles.activeTab]}
+            onPress={() => setSelectedCategory('albums')}
+          >
+            <Text style={[styles.tabIcon, selectedCategory === 'albums' && styles.activeTabIcon]}>
+              Albums
+            </Text>
+            <Text style={[styles.tabText, selectedCategory === 'albums' && styles.activeTabText]}>
+              Albums
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -314,42 +443,66 @@ const PhotoGallery: React.FC = () => {
         renderEmptyState()
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Photo Pairs Section */}
-          {pairs.length > 0 && (
+          {selectedCategory === 'albums' ? (
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Photo Pairs</Text>
-                <View style={styles.sectionBadge}>
-                  <Text style={styles.sectionBadgeText}>{pairs.length}</Text>
+              <Button title="Create Album" onPress={() => setAlbumModalVisible(true)} />
+              <FlatList
+                data={albums}
+                keyExtractor={item => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity onPress={() => setSelectedAlbum(item)}>
+                    <View style={styles.albumContainer}>
+                      <Text style={styles.albumName}>{item.name}</Text>
+                      <Button title="Delete" onPress={() => handleDeleteAlbum(item.id)} />
+                      <ScrollView horizontal>
+                        {item.photos.map(photo => (
+                          <Image key={photo.id} source={{ uri: photo.uri }} style={styles.thumbnail} />
+                        ))}
+                      </ScrollView>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          ) : (
+            <>
+              {/* Photo Pairs Section */}
+              {pairs.length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Photo Pairs</Text>
+                    <View style={styles.sectionBadge}>
+                      <Text style={styles.sectionBadgeText}>{pairs.length}</Text>
+                    </View>
+                  </View>
+                  <FlatList
+                    data={pairs}
+                    renderItem={renderPairItem}
+                    keyExtractor={item => item.id}
+                    scrollEnabled={false}
+                    contentContainerStyle={styles.pairsList}
+                  />
                 </View>
-              </View>
-              <FlatList
-                data={pairs}
-                renderItem={renderPairItem}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                contentContainerStyle={styles.pairsList}
-              />
-            </View>
-          )}
+              )}
 
-          {/* Categories Section */}
-          {categories && categories[selectedCategory] && categories[selectedCategory].length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>
-                  {selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} View
-                </Text>
-              </View>
-              <FlatList
-                data={categories[selectedCategory]}
-                renderItem={renderCategoryGroup}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-              />
-            </View>
+              {/* Categories Section */}
+              {categories && categories[selectedCategory] && categories[selectedCategory].length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>
+                      {selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} View
+                    </Text>
+                  </View>
+                  <FlatList
+                    data={categories[selectedCategory]}
+                    renderItem={renderCategoryGroup}
+                    keyExtractor={item => item.id}
+                    scrollEnabled={false}
+                  />
+                </View>
+              )}
+            </>
           )}
-
           {/* All Photos Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -704,6 +857,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6C757D',
     textAlign: 'center',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalView: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    marginBottom: 15,
+  },
+  input: {
+    width: '100%',
+    borderColor: 'gray',
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 20,
+    borderRadius: 5,
+  },
+  albumContainer: {
+    marginBottom: 20,
+  },
+  albumName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  thumbnail: {
+    width: 100,
+    height: 100,
+    marginRight: 10,
+    borderRadius: 10,
+  },
+  addToAlbumButton: {
+    color: '#007AFF',
+    marginBottom: 5,
+  },
+  albumSelectItem: {
+    fontSize: 18,
+    padding: 10,
   },
 });
 
