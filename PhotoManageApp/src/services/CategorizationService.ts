@@ -16,8 +16,8 @@ class CategorizationService {
     const groups = new Map<string, CategoryGroup>();
 
     photos.forEach(photo => {
-      const date = photo.timestamp.toDateString(); // Group by day
-      const dateLabel = photo.timestamp.toLocaleDateString();
+      const date = new Date(photo.timestamp).toDateString(); // Group by day
+      const dateLabel = new Date(photo.timestamp).toLocaleDateString();
 
       if (!groups.has(date)) {
         groups.set(date, {
@@ -34,10 +34,16 @@ class CategorizationService {
 
     // Sort photos within each group by timestamp
     groups.forEach(group => {
-      group.photos.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      group.photos.sort((a, b) => b.timestamp - a.timestamp);
     });
 
-    return this.sortGroupsByName(Array.from(groups.values()));
+    const sortedGroups = Array.from(groups.values()).sort((a, b) => {
+      const dateA = new Date(a.photos[0].timestamp);
+      const dateB = new Date(b.photos[0].timestamp);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    return sortedGroups;
   }
 
   /**

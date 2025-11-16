@@ -5,12 +5,12 @@ class MetadataService {
   /**
    * Request current GPS location for geotagging
    */
-  static async getCurrentLocation(): Promise<{ latitude: number; longitude: number } | null> {
+  static async getCurrentLocation(): Promise<{ latitude: number; longitude: number; altitude: number | null } | null> {
     return new Promise((resolve) => {
       Geolocation.getCurrentPosition(
         (position) => {
-          const { latitude, longitude } = position.coords;
-          resolve({ latitude, longitude });
+          const { latitude, longitude, altitude } = position.coords;
+          resolve({ latitude, longitude, altitude });
         },
         (error) => {
           console.warn('Location error:', error.message);
@@ -38,6 +38,7 @@ class MetadataService {
           ...photo.exif,
           GPSLatitude: location.latitude,
           GPSLongitude: location.longitude,
+          GPSAltitude: location.altitude,
         },
       };
       return updatedPhoto;

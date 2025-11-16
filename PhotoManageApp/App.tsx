@@ -10,7 +10,7 @@ import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
 import {
   SafeAreaProvider,
 } from 'react-native-safe-area-context';
-import PhotoGallery from './src/components/PhotoGallery';
+import GalleryScreen from './src/screens/GalleryScreen';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -19,7 +19,7 @@ function App() {
     <SafeAreaProvider>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <View style={styles.container}>
-        <PhotoGallery />
+        <GalleryScreen />
       </View>
     </SafeAreaProvider>
   );

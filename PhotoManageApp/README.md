@@ -12,6 +12,13 @@ This app allows photographers to:
 - Synchronize with personal NAS storage (future feature)
 - View paired RAW/JPEG photos side-by-side (future feature)
 
+## Usage
+
+1.  **Import Photos:** Tap the "Import" button to select photos from your device's gallery.
+2.  **View Photos:** Your photos will be displayed in the main gallery, grouped by date, location, or content.
+3.  **Compare Pairs:** If you have RAW and JPEG pairs, they will be displayed in the "Photo Pairs" section. Tap on a pair to view them side-by-side.
+4.  **View Metadata:** In the split view, you can see detailed metadata for each photo, including camera settings, resolution, and GPS coordinates.
+
 ## Current Implementation Status
 
 ### ✅ Completed Features (All Requirements Met)
@@ -64,14 +71,22 @@ This app allows photographers to:
 ```
 src/
 ├── components/
-│   └── PhotoGallery.tsx        # Main gallery component
+│   ├── Header.tsx
+│   ├── CategoryTabs.tsx
+│   ├── PhotoPairList.tsx
+│   ├── CategoryGroupList.tsx
+│   ├── PhotoGrid.tsx
+│   ├── EmptyState.tsx
+│   └── LoadingIndicator.tsx
+├── screens/
+│   └── GalleryScreen.tsx
 ├── services/
-│   └── PhotoService.ts         # Photo management logic
+│   └── PhotoService.ts
 ├── types/
-│   ├── photo.ts                # Photo data interfaces
-│   ├── image.picker.d.ts       # Image picker types
-│   └── exif.d.ts              # EXIF data types
-└── utils/                       # Utility functions
+│   ├── photo.ts
+│   ├── image.picker.d.ts
+│   └── exif.d.ts
+└── utils/
 ```
 
 ## Technology Stack
@@ -108,15 +123,6 @@ src/
 4. **Permissions Setup:**
    - iOS: Add photo library permissions to Info.plist
    - Android: Add storage permissions to AndroidManifest.xml
-
-## Implementation Guidelines
-
-Following the specified rules and guidelines:
-- Prioritizing photo import and pairing as core features
-- Using TypeScript for type safety
-- Implementing clean, modular architecture
-- Following React Native best practices
-- Preparing for hybrid storage and NAS sync
 
 ## Testing
 

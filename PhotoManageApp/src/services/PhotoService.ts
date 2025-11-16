@@ -16,7 +16,7 @@ class PhotoService {
         const photos: Photo[] = JSON.parse(storedPhotos);
         return photos.map(photo => ({
           ...photo,
-          timestamp: new Date(photo.timestamp),
+          timestamp: new Date(photo.timestamp).getTime(),
         }));
       }
     } catch (error) {
@@ -84,8 +84,8 @@ class PhotoService {
       width: width,
       height: height,
       timestamp: exifData?.DateTimeOriginal
-        ? new Date(exifData.DateTimeOriginal)
-        : new Date(),
+        ? new Date(exifData.DateTimeOriginal).getTime()
+        : new Date().getTime(),
       exif: exifData,
     };
 
@@ -137,7 +137,7 @@ class PhotoService {
     // Extract timestamp if available
     const timestamp = photo.exif?.DateTimeOriginal
       ? new Date(photo.exif.DateTimeOriginal).getTime()
-      : photo.timestamp.getTime();
+      : photo.timestamp;
 
     // Create pairing key based on filename and timestamp
     return `${baseName}_${timestamp}`;
@@ -167,7 +167,7 @@ class PhotoService {
    * Get photos sorted by timestamp
    */
   static sortPhotosByDate(photos: Photo[]): Photo[] {
-    return photos.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    return photos.sort((a, b) => b.timestamp - a.timestamp);
   }
 }
 
