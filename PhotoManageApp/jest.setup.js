@@ -17,3 +17,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 jest.mock('react-native-geolocation-service', () => ({
   getCurrentPosition: jest.fn(),
 }));
+
+jest.mock('react-native-exif', () => ({
+  getExif: jest.fn(() => Promise.resolve({})),
+}));
