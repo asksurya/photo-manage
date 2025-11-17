@@ -110,11 +110,11 @@ class NasSyncService {
   /**
    * Set last sync timestamp
    */
-  static async setLastSyncTime(timestamp: Date): Promise<void> {
+  static async setLastSyncTime(timestamp: number): Promise<void> {
     try {
       // Implementation for tracking sync status
       // Would store sync timestamps in AsyncStorage
-      console.log(`Last sync time updated to: ${timestamp.toISOString()}`);
+      console.log(`Last sync time updated to: ${new Date(timestamp).toISOString()}`);
     } catch (error) {
       console.error('Error setting last sync time:', error);
     }
