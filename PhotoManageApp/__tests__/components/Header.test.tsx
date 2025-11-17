@@ -2,6 +2,12 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import Header from '../../src/components/Header';
 
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({
+    navigate: jest.fn(),
+  }),
+}));
+
 describe('Header', () => {
   it('renders correctly', () => {
     const { getByText } = render(

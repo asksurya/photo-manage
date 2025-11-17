@@ -5,12 +5,19 @@
  * @format
  */
 
+import 'react-native-gesture-handler';
 import React from 'react';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-} from 'react-native-safe-area-context';
+import { StatusBar, useColorScheme } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { navigationRef } from './src/services/NavigationService';
+import { RootStackParamList } from './src/types/navigation';
 import GalleryScreen from './src/screens/GalleryScreen';
+import AlbumsScreen from './src/screens/AlbumsScreen';
+import AlbumPhotosScreen from './src/screens/AlbumPhotosScreen';
+
+const Stack = createStackNavigator<RootStackParamList>();
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -18,17 +25,15 @@ function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <View style={styles.container}>
-        <GalleryScreen />
-      </View>
+      <NavigationContainer ref={navigationRef}>
+        <Stack.Navigator initialRouteName="Gallery">
+          <Stack.Screen name="Gallery" component={GalleryScreen} />
+          <Stack.Screen name="Albums" component={AlbumsScreen} />
+          <Stack.Screen name="AlbumPhotos" component={AlbumPhotosScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
 
 export default App;

@@ -38,9 +38,7 @@ class CategorizationService {
     });
 
     const sortedGroups = Array.from(groups.values()).sort((a, b) => {
-      const dateA = new Date(a.photos[0].timestamp);
-      const dateB = new Date(b.photos[0].timestamp);
-      return dateB.getTime() - dateA.getTime();
+      return b.photos[0].timestamp - a.photos[0].timestamp;
     });
 
     return sortedGroups;
