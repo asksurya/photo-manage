@@ -101,6 +101,27 @@ describe('NasSyncService', () => {
 
       expect(photo).toBeNull();
     });
+
+    it('should use correct default port for HTTPS', async () => {
+      // Setup mocks
+      (RNFS.downloadFile as jest.Mock).mockReturnValue({
+        promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
+      });
+      (RNFS.stat as jest.Mock).mockResolvedValue({
+        size: 2048,
+        mtime: new Date(),
+        ctime: new Date(),
+        isFile: () => true,
+      });
+
+      const config: NasConfig = { ...mockConfig, useHttps: true, port: undefined };
+
+      await NasSyncService.downloadPhoto('/photo.jpg', config);
+
+      expect(RNFS.downloadFile).toHaveBeenCalledWith(expect.objectContaining({
+        fromUrl: expect.stringMatching(/^https:\/\/.*:443\//),
+      }));
+    });
   });
 
   describe('testConnection', () => {
