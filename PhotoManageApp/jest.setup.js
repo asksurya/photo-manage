@@ -57,7 +57,7 @@ jest.mock('react-native-fs', () => ({
   getFSInfo: jest.fn(),
   getAllExternalFilesDirs: jest.fn(),
   unlink: jest.fn(() => Promise.resolve()),
-  exists: jest.fn(() => Promise.resolve(false)),
+  exists: jest.fn(() => Promise.resolve(true)),
   stopDownload: jest.fn(),
   resumeDownload: jest.fn(),
   isResumable: jest.fn(),
