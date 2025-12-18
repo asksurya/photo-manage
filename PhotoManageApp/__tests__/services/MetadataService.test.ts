@@ -68,7 +68,8 @@ describe('MetadataService', () => {
   it('should handle location name fallback', async () => {
     (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
-    const locationName = await MetadataService.getLocationName(12.34, 56.78);
-    expect(locationName).toBe('12.3400, 56.7800');
+    // Use different coordinates to bypass cache from previous test
+    const locationName = await MetadataService.getLocationName(10.00, 20.00);
+    expect(locationName).toBe('10.0000, 20.0000');
   });
 });

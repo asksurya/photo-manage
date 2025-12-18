@@ -48,7 +48,7 @@ class CategorizationService {
   /**
    * Categorize photos by location (if GPS data exists)
    */
-  static async categorizeByLocation(photos: Photo[]): Promise<CategoryGroup[]> {
+  static categorizeByLocation(photos: Photo[]): CategoryGroup[] {
     const groups = new Map<string, CategoryGroup>();
 
     // Only categorize photos that have GPS data
@@ -74,34 +74,6 @@ class CategorizationService {
 
       groups.get(locationKey)!.photos.push(photo);
     });
-
-    // Fetch actual location names for each group sequentially to respect API rate limits
-    const groupEntries = Array.from(groups.entries());
-    for (const [key, group] of groupEntries) {
-      // Use coordinates from the first photo in the group
-      if (group.photos.length > 0) {
-        const firstPhoto = group.photos[0];
-        if (
-          firstPhoto.exif?.GPSLatitude !== undefined &&
-          firstPhoto.exif?.GPSLatitude !== null &&
-          firstPhoto.exif?.GPSLongitude !== undefined &&
-          firstPhoto.exif?.GPSLongitude !== null
-        ) {
-          try {
-            const placeName = await MetadataService.getLocationName(
-              firstPhoto.exif.GPSLatitude,
-              firstPhoto.exif.GPSLongitude
-            );
-            group.title = placeName;
-
-            // Add a small delay between requests to be nice to the API
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          } catch (error) {
-            console.warn(`Failed to get location name for group ${key}`, error);
-          }
-        }
-      }
-    }
 
     // Add photos without location to a separate group
     const photosWithoutLocation = photos.filter(photo =>
@@ -163,13 +135,48 @@ class CategorizationService {
   }
 
   /**
+   * Enrich category titles with real place names
+   * This process is slow due to API rate limiting, so it should be called separately
+   */
+  static async enrichCategoryTitles(categories: { [key in CategoryType]: CategoryGroup[] }): Promise<{ [key in CategoryType]: CategoryGroup[] }> {
+    const locationGroups = categories[CategoryType.LOCATION];
+    const locationPromises: Promise<void>[] = [];
+
+    // Process location groups to fetch real names
+    locationGroups.forEach(group => {
+      // Skip "No Location" group
+      if (group.id === 'location-no-location') return;
+
+      // Extract lat/lng from the first photo
+      const firstPhoto = group.photos[0];
+      if (firstPhoto?.exif?.GPSLatitude && firstPhoto?.exif?.GPSLongitude) {
+        locationPromises.push(
+          MetadataService.getLocationName(firstPhoto.exif.GPSLatitude, firstPhoto.exif.GPSLongitude)
+            .then(name => {
+              group.title = name;
+            })
+            .catch(err => {
+              console.warn(`Failed to enrich title for group ${group.id}:`, err);
+            })
+        );
+      }
+    });
+
+    // Wait for all enrichments to complete (MetadataService handles queuing)
+    if (locationPromises.length > 0) {
+      await Promise.all(locationPromises);
+    }
+
+    return { ...categories };
+  }
+
+  /**
    * Get all categorization options
    */
-  static async getAllCategories(photos: Photo[]): Promise<{ [key in CategoryType]: CategoryGroup[] }> {
-    const locationGroups = await this.categorizeByLocation(photos);
+  static getAllCategories(photos: Photo[]): { [key in CategoryType]: CategoryGroup[] } {
     return {
       [CategoryType.DATE]: this.categorizeByDate(photos),
-      [CategoryType.LOCATION]: locationGroups,
+      [CategoryType.LOCATION]: this.categorizeByLocation(photos),
       [CategoryType.CONTENT]: this.categorizeByContent(photos),
     };
   }

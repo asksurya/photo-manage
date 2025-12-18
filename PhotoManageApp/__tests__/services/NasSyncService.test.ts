@@ -1,5 +1,5 @@
 import NasSyncService from '../../src/services/NasSyncService';
-import { NasConfig } from '../../src/types/photo';
+import { NasConfig, Photo } from '../../src/types/photo';
 import RNFS from 'react-native-fs';
 import Exif from 'react-native-exif';
 import { jest } from '@jest/globals';
@@ -12,6 +12,11 @@ global.fetch = mockFetch as unknown as typeof fetch;
 // Mock btoa if not present (Node environment)
 if (!global.btoa) {
   global.btoa = (str: string) => Buffer.from(str).toString('base64');
+}
+
+// Mock atob if not present
+if (!global.atob) {
+  global.atob = (str: string) => Buffer.from(str, 'base64').toString('binary');
 }
 
 describe('NasSyncService', () => {
@@ -27,6 +32,85 @@ describe('NasSyncService', () => {
   afterEach(() => {
     jest.clearAllMocks();
     mockFetch.mockClear();
+  });
+
+  describe('uploadPhoto', () => {
+    const mockPhoto: Photo = {
+      id: '1',
+      uri: 'file:///path/to/photo.jpg',
+      filename: 'photo.jpg',
+      type: 'image/jpeg',
+      size: 1024,
+      width: 800,
+      height: 600,
+      timestamp: 1629876543210,
+    };
+
+    it('should upload photo correctly', async () => {
+      // Setup mocks
+      const mockBase64 = Buffer.from('test data').toString('base64');
+      (RNFS.readFile as jest.Mock).mockResolvedValue(mockBase64);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 201, // Created
+      });
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(true);
+
+      expect(RNFS.readFile).toHaveBeenCalledWith(mockPhoto.uri, 'base64');
+
+      const expectedAuth = 'Basic ' + Buffer.from('user:password').toString('base64');
+      const expectedUrl = 'http://192.168.1.100:8080/photos/photo.jpg';
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expectedUrl,
+        expect.objectContaining({
+          method: 'PUT',
+          headers: expect.objectContaining({
+             'Authorization': expectedAuth,
+             'Content-Type': 'application/octet-stream'
+          }),
+          // Body verification is tricky with Uint8Array in jest, checking type
+          body: expect.any(Uint8Array)
+        })
+      );
+    });
+
+    it('should handle upload failure', async () => {
+       // Setup mocks
+       (RNFS.readFile as jest.Mock).mockResolvedValue('base64data');
+       mockFetch.mockResolvedValue({
+         ok: false,
+         status: 500,
+         statusText: 'Internal Server Error'
+       });
+
+       const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+       expect(result).toBe(false);
+    });
+
+    it('should handle network error during upload', async () => {
+       (RNFS.readFile as jest.Mock).mockResolvedValue('base64data');
+       mockFetch.mockRejectedValue(new Error('Network Error'));
+
+       const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+       expect(result).toBe(false);
+    });
+
+    it('should construct correct URL with HTTPS and default port', async () => {
+       const httpsConfig = { ...mockConfig, useHttps: true, port: undefined };
+       (RNFS.readFile as jest.Mock).mockResolvedValue('base64data');
+       mockFetch.mockResolvedValue({ ok: true });
+
+       await NasSyncService.uploadPhoto(mockPhoto, httpsConfig);
+
+       const expectedUrl = 'https://192.168.1.100:443/photos/photo.jpg';
+       expect(mockFetch).toHaveBeenCalledWith(expectedUrl, expect.anything());
+    });
   });
 
   describe('downloadPhoto', () => {

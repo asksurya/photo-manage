@@ -4,7 +4,7 @@ import { Photo, CategoryType } from '../../src/types/photo';
 
 // Mock MetadataService
 jest.mock('../../src/services/MetadataService', () => ({
-  getLocationName: jest.fn(),
+  getLocationName: jest.fn().mockImplementation((lat, lng) => Promise.resolve(`${lat.toFixed(2)}, ${lng.toFixed(2)} Name`)),
 }));
 
 describe('CategorizationService', () => {
@@ -19,47 +19,39 @@ describe('CategorizationService', () => {
       { id: '3', uri: 'file:///test3.jpg', filename: 'test3.jpg', timestamp: new Date('2024-01-02').getTime(), width: 100, height: 100, exif: {} },
     ];
 
-    // Use mock resolved value for getLocationName to avoid errors in getAllCategories
-    (MetadataService.getLocationName as jest.Mock).mockResolvedValue('Unknown Location');
-
-    const categories = await CategorizationService.getAllCategories(photos);
-    const dateCategories = categories[CategoryType.DATE];
-    expect(dateCategories.length).toBe(2);
-    expect(dateCategories[0].title).toContain('1/2/2024');
-    expect(dateCategories[0].photos.length).toBe(1);
-    expect(dateCategories[1].title).toContain('1/1/2024');
-    expect(dateCategories[1].photos.length).toBe(2);
+    const categories = CategorizationService.categorizeByDate(photos);
+    expect(categories.length).toBe(2);
+    expect(categories[0].title).toContain('1/2/2024');
+    expect(categories[0].photos.length).toBe(1);
+    expect(categories[1].title).toContain('1/1/2024');
+    expect(categories[1].photos.length).toBe(2);
   });
 
-  it('should categorize photos by location', async () => {
+  it('should categorize photos by location', () => {
     const photos: Photo[] = [
       { id: '1', uri: 'file:///test1.jpg', filename: 'test1.jpg', timestamp: Date.now(), width: 100, height: 100, exif: { GPSLatitude: 12.34, GPSLongitude: 56.78 } },
       { id: '2', uri: 'file:///test2.jpg', filename: 'test2.jpg', timestamp: Date.now(), width: 100, height: 100, exif: { GPSLatitude: 12.34, GPSLongitude: 56.78 } },
       { id: '3', uri: 'file:///test3.jpg', filename: 'test3.jpg', timestamp: Date.now(), width: 100, height: 100, exif: { GPSLatitude: 43.21, GPSLongitude: 87.65 } },
     ];
 
-    // Mock getLocationName implementation based on coordinates
-    (MetadataService.getLocationName as jest.Mock).mockImplementation(async (lat, lon) => {
-      if (lat === 12.34 && lon === 56.78) return 'City A';
-      if (lat === 43.21 && lon === 87.65) return 'City B';
-      return 'Unknown';
-    });
+    const categories = CategorizationService.categorizeByLocation(photos);
+    expect(categories.length).toBe(2);
+    expect(categories[0].title).toContain('12.34');
+    expect(categories[0].photos.length).toBe(2);
+    expect(categories[1].title).toContain('43.21');
+    expect(categories[1].photos.length).toBe(1);
+  });
 
-    const categories = await CategorizationService.getAllCategories(photos);
-    const locationCategories = categories[CategoryType.LOCATION];
+  it('should enrich category titles', async () => {
+    const photos: Photo[] = [
+      { id: '1', uri: 'file:///test1.jpg', filename: 'test1.jpg', timestamp: Date.now(), width: 100, height: 100, exif: { GPSLatitude: 12.34, GPSLongitude: 56.78 } },
+    ];
 
-    expect(locationCategories.length).toBe(2);
+    const initialCategories = CategorizationService.getAllCategories(photos);
+    expect(initialCategories[CategoryType.LOCATION][0].title).toContain('12.34');
 
-    // Check first location group (sorted by title)
-    // "City A" < "City B"
-    const groupA = locationCategories.find(g => g.title === 'City A');
-    expect(groupA).toBeDefined();
-    expect(groupA!.photos.length).toBe(2);
-
-    const groupB = locationCategories.find(g => g.title === 'City B');
-    expect(groupB).toBeDefined();
-    expect(groupB!.photos.length).toBe(1);
-
-    expect(MetadataService.getLocationName).toHaveBeenCalledTimes(2);
+    const enrichedCategories = await CategorizationService.enrichCategoryTitles(initialCategories);
+    expect(enrichedCategories[CategoryType.LOCATION][0].title).toContain('12.34, 56.78 Name');
+    expect(MetadataService.getLocationName).toHaveBeenCalledTimes(1);
   });
 });

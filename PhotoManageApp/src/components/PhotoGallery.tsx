@@ -51,13 +51,32 @@ const PhotoGallery: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const loadCategories = async () => {
-      if (photos.length > 0) {
-        const allCategories = await CategorizationService.getAllCategories(photos);
-        setCategories(allCategories);
-      }
+    let isMounted = true;
+
+    if (photos.length > 0) {
+      // 1. Initial fast load with coordinate titles
+      const initialCategories = CategorizationService.getAllCategories(photos);
+      setCategories(initialCategories);
+
+      // 2. Background update with real place names
+      const enrichCategories = async () => {
+        try {
+          const enriched = await CategorizationService.enrichCategoryTitles(initialCategories);
+          if (isMounted) {
+            // Force update with new titles (creating shallow copy to trigger re-render)
+            setCategories({ ...enriched });
+          }
+        } catch (error) {
+          console.warn('Failed to enrich categories:', error);
+        }
+      };
+
+      enrichCategories();
+    }
+
+    return () => {
+      isMounted = false;
     };
-    loadCategories();
   }, [photos]);
 
   const requestPermissions = async () => {
@@ -342,7 +361,7 @@ const PhotoGallery: React.FC = () => {
             />
             <Button title="Cancel" onPress={() => setAlbumSelectionModalVisible(false)} />
           </View>
-        </view>
+        </View>
       </Modal>
 
       <Modal
