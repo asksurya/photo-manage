@@ -2,6 +2,10 @@ import Geolocation from 'react-native-geolocation-service';
 import { Photo } from '../types/photo';
 
 class MetadataService {
+  private static locationCache = new Map<string, string>();
+  private static lastRequestTime = 0;
+  private static readonly MIN_REQUEST_INTERVAL = 1000; // 1 second
+
   /**
    * Request current GPS location for geotagging
    */
@@ -51,9 +55,58 @@ class MetadataService {
    * Extract location display name from coordinates
    */
   static async getLocationName(latitude: number, longitude: number): Promise<string> {
-    // In a real implementation, this would use a geocoding service
-    // For now, return formatted coordinates
-    return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    const cacheKey = `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+    if (this.locationCache.has(cacheKey)) {
+      return this.locationCache.get(cacheKey)!;
+    }
+
+    try {
+      // Respect rate limits
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.lastRequestTime;
+      if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL) {
+        await new Promise(resolve => setTimeout(resolve, this.MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+      }
+
+      this.lastRequestTime = Date.now();
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+        {
+          headers: {
+            'User-Agent': 'PhotoManageApp/1.0',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Geocoding failed');
+      }
+
+      const data = await response.json();
+      const address = data.address;
+      let result = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+
+      if (address) {
+        const placeName =
+          address.city ||
+          address.town ||
+          address.village ||
+          address.hamlet ||
+          address.suburb ||
+          address.county;
+
+        if (placeName) {
+          const state = address.state;
+          result = state ? `${placeName}, ${state}` : placeName;
+        }
+      }
+
+      this.locationCache.set(cacheKey, result);
+      return result;
+    } catch (error) {
+      console.warn('Geocoding error:', error);
+      return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    }
   }
 
   /**
