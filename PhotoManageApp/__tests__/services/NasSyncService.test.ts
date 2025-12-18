@@ -29,6 +29,99 @@ describe('NasSyncService', () => {
     mockFetch.mockClear();
   });
 
+  describe('uploadPhoto', () => {
+    it('should upload photo correctly', async () => {
+      const photo = {
+        id: '1',
+        uri: 'file:///local/photo.jpg',
+        filename: 'photo.jpg',
+        type: 'image/jpeg',
+        size: 1024,
+        timestamp: 1234567890,
+      };
+
+      // Mock file read
+      const mockBase64 = 'SGVsbG8gV29ybGQ='; // "Hello World"
+      (RNFS.readFile as jest.Mock).mockResolvedValue(mockBase64);
+
+      // Mock fetch success
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 201,
+      });
+
+      const result = await NasSyncService.uploadPhoto(photo, mockConfig);
+
+      expect(result).toBe(true);
+
+      // Verify file read
+      expect(RNFS.readFile).toHaveBeenCalledWith(photo.uri, 'base64');
+
+      // Verify URL construction
+      const expectedUrl = 'http://192.168.1.100:8080/photos/photo.jpg';
+
+      // Verify Auth Header
+      const expectedAuth = 'Basic ' + global.btoa('user:password');
+
+      expect(mockFetch).toHaveBeenCalledWith(expectedUrl, expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({
+          'Authorization': expectedAuth,
+          'Content-Type': 'application/octet-stream'
+        }),
+      }));
+
+      // Verify Body (Uint8Array)
+      // "Hello World" in Uint8Array
+      const expectedBody = new Uint8Array([72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100]);
+
+      const calls = mockFetch.mock.calls;
+      const args = calls[0]; // First call
+      const body = args[1].body;
+
+      expect(body).toEqual(expectedBody);
+    });
+
+    it('should handle upload failure', async () => {
+      const photo = {
+        id: '1',
+        uri: 'file:///local/photo.jpg',
+        filename: 'photo.jpg',
+        type: 'image/jpeg',
+        size: 1024,
+        timestamp: 1234567890,
+      };
+
+      (RNFS.readFile as jest.Mock).mockResolvedValue('base64data');
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error'
+      });
+
+      const result = await NasSyncService.uploadPhoto(photo, mockConfig);
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle exceptions during upload', async () => {
+      const photo = {
+        id: '1',
+        uri: 'file:///local/photo.jpg',
+        filename: 'photo.jpg',
+        type: 'image/jpeg',
+        size: 1024,
+        timestamp: 1234567890,
+      };
+
+      (RNFS.readFile as jest.Mock).mockRejectedValue(new Error('File read error'));
+
+      const result = await NasSyncService.uploadPhoto(photo, mockConfig);
+
+      expect(result).toBe(false);
+    });
+  });
+
   describe('downloadPhoto', () => {
     it('should download photo correctly', async () => {
       const remotePath = '/2023/photo.jpg';
