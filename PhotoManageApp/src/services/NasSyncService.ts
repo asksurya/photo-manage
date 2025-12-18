@@ -50,22 +50,106 @@ class NasSyncService {
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would:
       // 1. Read the file from local storage using RNFS
-      // 2. Upload via HTTP to NAS endpoint
-      // 3. Handle authentication and SSL
+      // RNFS reads as base64 string
+      const fileContentBase64 = await RNFS.readFile(photo.uri, 'base64');
 
-      const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
+      // Convert to Uint8Array for binary upload
+      const fileContent = this.base64ToUint8Array(fileContentBase64);
+
+      // 2. Construct URL
+      const { host, port, username, password, useHttps, remotePath } = config;
+      const protocol = useHttps ? 'https' : 'http';
+      const actualPort = port || (useHttps ? 443 : 80);
+
+      let path = remotePath || '/photos';
+      // Ensure path starts with / and doesn't end with /
+      if (!path.startsWith('/')) path = '/' + path;
+      path = path.replace(/\/$/, '');
+
+      const uploadUrl = `${protocol}://${host}:${actualPort}${path}/${photo.filename}`;
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
 
-      // Mock upload - would implement actual HTTP PUT/POST request here
-      // const fileContent = await RNFS.readFile(photo.uri, 'base64');
-      return true; // Assume success for demo
+      // 3. Handle authentication
+      // Use existing btoa logic or helper
+      const credentials = `${username}:${password}`;
+      // Use helper to ensure btoa availability
+      const base64Auth = this.encodeBase64(credentials);
+
+      // 4. Upload via HTTP to NAS endpoint
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Basic ${base64Auth}`,
+          'Content-Type': 'application/octet-stream',
+        },
+        body: fileContent as any // Fetch body handles Uint8Array
+      });
+
+      if (!response.ok) {
+        console.error(`Upload failed with status: ${response.status} ${response.statusText}`);
+        return false;
+      }
+
+      return true;
     } catch (error) {
       console.error('NAS upload failed:', error);
       return false;
     }
+  }
+
+  private static base64ToUint8Array(base64: string): Uint8Array {
+    // Polyfill for atob if not available
+    const atob = (input: string) => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+      let str = input.replace(/=+$/, '');
+      let output = '';
+
+      if (str.length % 4 == 1) {
+        throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
+      }
+      for (let bc = 0, bs = 0, buffer, i = 0;
+        buffer = str.charAt(i++);
+
+        ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+          bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+      ) {
+        buffer = chars.indexOf(buffer);
+      }
+
+      return output;
+    };
+
+    const binaryString = typeof global.atob === 'function' ? global.atob(base64) : atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  private static encodeBase64(input: string): string {
+    const btoa = (input: string) => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+      let str = input;
+      let output = '';
+
+      for (let block = 0, charCode, i = 0, map = chars;
+      str.charAt(i | 0) || (map = '=', i % 1);
+      output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+        charCode = str.charCodeAt(i += 3 / 4);
+        if (charCode > 0xFF) {
+          throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+        }
+        block = block << 8 | charCode;
+      }
+
+      return output;
+    };
+
+    return typeof global.btoa === 'function' ? global.btoa(input) : btoa(input);
   }
 
   /**
