@@ -42,8 +42,14 @@ jest.mock('react-native-fs', () => ({
   existsAssets: jest.fn(),
   readdir: jest.fn(),
   setReadable: jest.fn(),
-  stat: jest.fn(),
-  readFile: jest.fn(() => Promise.resolve('')),
+  stat: jest.fn(() => Promise.resolve({
+    size: 1024,
+    mtime: new Date(),
+    ctime: new Date(),
+    isFile: () => true,
+    isDirectory: () => false,
+  })),
+  readFile: jest.fn(() => Promise.resolve('base64content')),
   read: jest.fn(),
   readFileAssets: jest.fn(),
   hash: jest.fn(),
@@ -53,7 +59,9 @@ jest.mock('react-native-fs', () => ({
   writeFile: jest.fn(() => Promise.resolve()),
   appendFile: jest.fn(),
   write: jest.fn(),
-  downloadFile: jest.fn(),
+  downloadFile: jest.fn(() => ({
+    promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
+  })),
   uploadFiles: jest.fn(),
   touch: jest.fn(),
   MainBundlePath: '/mock/MainBundlePath',
@@ -92,20 +100,14 @@ jest.mock('react-native-gesture-handler', () => {
   };
 });
 
-jest.mock('react-native-fs', () => ({
-  DocumentDirectoryPath: '/mock/document/path',
-  CachesDirectoryPath: '/mock/caches/path',
-  downloadFile: jest.fn(() => ({
-    promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
-  })),
-  stat: jest.fn(() => Promise.resolve({
-    size: 1024,
-    mtime: new Date(),
-    ctime: new Date(),
-    isFile: () => true,
-    isDirectory: () => false,
-  })),
-  readFile: jest.fn(() => Promise.resolve('base64content')),
-  exists: jest.fn(() => Promise.resolve(true)),
-  mkdir: jest.fn(() => Promise.resolve()),
-}));
+jest.mock('react-native-smb', () => {
+  return {
+    SMB2Client: jest.fn().mockImplementation((ip, username, password, shareName) => ({
+      connect: jest.fn((cb) => cb(null)),
+      disconnect: jest.fn((cb) => cb(null)),
+      list: jest.fn((path, cb) => cb(null, [])),
+      upload: jest.fn((localPath, remotePath, cb) => cb(null, 'id')),
+      download: jest.fn((remotePath, localPath, cb) => cb(null, 'id')),
+    })),
+  };
+});
