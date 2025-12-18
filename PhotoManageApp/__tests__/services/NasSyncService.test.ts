@@ -1,5 +1,5 @@
 import NasSyncService from '../../src/services/NasSyncService';
-import { NasConfig } from '../../src/types/photo';
+import { NasConfig, Photo } from '../../src/types/photo';
 import RNFS from 'react-native-fs';
 import Exif from 'react-native-exif';
 import { jest } from '@jest/globals';
@@ -100,6 +100,82 @@ describe('NasSyncService', () => {
       const photo = await NasSyncService.downloadPhoto(remotePath, mockConfig);
 
       expect(photo).toBeNull();
+    });
+  });
+
+  describe('uploadPhoto', () => {
+    const mockPhoto: Photo = {
+      id: '1',
+      uri: 'file:///path/to/photo.jpg',
+      filename: 'photo.jpg',
+      type: 'image/jpeg',
+      size: 1024,
+      width: 100,
+      height: 100,
+      timestamp: 1672531200000,
+    };
+
+    it('should upload photo correctly', async () => {
+      // Setup mocks
+      (RNFS.readFile as jest.Mock).mockResolvedValue('base64encodedstring');
+
+      const mockBlob = { size: 1024, type: 'image/jpeg' };
+      // Mock the first fetch which is used to create blob from base64
+      mockFetch.mockResolvedValueOnce({
+        blob: () => Promise.resolve(mockBlob),
+      });
+      // Mock the second fetch which performs the upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+      });
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(true);
+
+      // Verify RNFS.readFile was called
+      expect(RNFS.readFile).toHaveBeenCalledWith(mockPhoto.uri, 'base64');
+
+      // Verify fetch calls
+      // 1. Data URI fetch
+      expect(mockFetch).toHaveBeenNthCalledWith(1,
+        expect.stringContaining('data:image/jpeg;base64,base64encodedstring')
+      );
+
+      // 2. Upload fetch
+      const expectedAuth = 'Basic ' + Buffer.from('user:password').toString('base64');
+      expect(mockFetch).toHaveBeenNthCalledWith(2,
+        'http://192.168.1.100:8080/photos/photo.jpg',
+        expect.objectContaining({
+          method: 'PUT',
+          headers: expect.objectContaining({
+            Authorization: expectedAuth,
+          }),
+          body: mockBlob,
+        })
+      );
+    });
+
+    it('should handle upload failure', async () => {
+      (RNFS.readFile as jest.Mock).mockResolvedValue('base64encodedstring');
+      mockFetch.mockResolvedValueOnce({
+        blob: () => Promise.resolve({}),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+      });
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle errors during upload', async () => {
+      (RNFS.readFile as jest.Mock).mockRejectedValue(new Error('Read error'));
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(false);
     });
   });
 
