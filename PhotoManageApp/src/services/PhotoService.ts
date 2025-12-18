@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Photo, PhotoPair, Album } from '../types/photo';
-// import RNFS from 'react-native-fs'; // Ready for file operations
+import RNFS from 'react-native-fs'; // Ready for file operations
 import Exif from 'react-native-exif';
 
 class PhotoService {
@@ -231,6 +231,60 @@ class PhotoService {
     if (album) {
       album.photoIds = album.photoIds.filter((id) => id !== photoId);
       await this.saveAlbums(albums);
+    }
+  }
+
+  /**
+   * File Operations
+   */
+
+  /**
+   * Check if a file exists
+   */
+  static async fileExists(path: string): Promise<boolean> {
+    try {
+      return await RNFS.exists(path);
+    } catch (error) {
+      console.error('Error checking file existence:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Delete a file
+   */
+  static async deleteFile(path: string): Promise<void> {
+    try {
+      if (await this.fileExists(path)) {
+        await RNFS.unlink(path);
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      throw new Error(`Failed to delete file: ${path}`);
+    }
+  }
+
+  /**
+   * Move a file
+   */
+  static async moveFile(sourcePath: string, destPath: string): Promise<void> {
+    try {
+      await RNFS.moveFile(sourcePath, destPath);
+    } catch (error) {
+      console.error('Error moving file:', error);
+      throw new Error(`Failed to move file from ${sourcePath} to ${destPath}`);
+    }
+  }
+
+  /**
+   * Copy a file
+   */
+  static async copyFile(sourcePath: string, destPath: string): Promise<void> {
+    try {
+      await RNFS.copyFile(sourcePath, destPath);
+    } catch (error) {
+      console.error('Error copying file:', error);
+      throw new Error(`Failed to copy file from ${sourcePath} to ${destPath}`);
     }
   }
 }
