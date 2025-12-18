@@ -7,4 +7,7 @@ export type RootStackParamList = {
     albumName: string;
     photos: Photo[];
   };
+  Search: undefined;
+  Map: undefined;
+  Settings: undefined;
 };

@@ -23,6 +23,7 @@ interface SplitViewProps {
 const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [isFavorite, setIsFavorite] = useState(false);
 
   useEffect(() => {
     if (modalVisible) {
@@ -30,9 +31,53 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
     }
   }, [modalVisible]);
 
+  useEffect(() => {
+    checkFavoriteStatus();
+  }, [pair]);
+
   const loadAlbums = async () => {
     const loadedAlbums = await PhotoService.getAlbums();
     setAlbums(loadedAlbums);
+  };
+
+  const checkFavoriteStatus = async () => {
+    if (pair.raw) {
+      const photos = await PhotoService.loadPhotos();
+      const currentPhoto = photos.find(p => p.id === pair.raw!.id);
+      if (currentPhoto) {
+        setIsFavorite(!!currentPhoto.isFavorite);
+      }
+    } else if (pair.jpeg) {
+      const photos = await PhotoService.loadPhotos();
+      const currentPhoto = photos.find(p => p.id === pair.jpeg!.id);
+      if (currentPhoto) {
+        setIsFavorite(!!currentPhoto.isFavorite);
+      }
+    }
+  };
+
+  const toggleFavorite = async () => {
+    let newStatus = false;
+    if (pair.raw) {
+      newStatus = await PhotoService.toggleFavorite(pair.raw.id);
+    }
+    if (pair.jpeg) {
+       // If we have both, toggle both to keep them in sync, or just one?
+       // Let's assume logic mirrors raw if present, or jpeg if not.
+       // Ideally we should favorite the underlying "Photo" entities.
+       // The service toggles by ID.
+       if (pair.raw) {
+          // already done above
+       } else {
+         newStatus = await PhotoService.toggleFavorite(pair.jpeg.id);
+       }
+
+       // If both exist, we might want to sync their favorite status
+       if (pair.raw && pair.jpeg) {
+         await PhotoService.toggleFavorite(pair.jpeg.id);
+       }
+    }
+    setIsFavorite(newStatus);
   };
 
   const handleAddToAlbum = async (albumId: string) => {
@@ -188,6 +233,9 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
         <TouchableOpacity style={styles.addToAlbumButton} onPress={() => setModalVisible(true)}>
           <Text style={styles.addToAlbumButtonText}>Add to Album</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.favoriteButton} onPress={toggleFavorite}>
+          <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️' : '🤍'}</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Content */}
@@ -313,6 +361,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  favoriteButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  favoriteButtonText: {
+    fontSize: 24,
   },
   content: {
     flex: 1,

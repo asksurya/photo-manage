@@ -50,18 +50,58 @@ class NasSyncService {
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would:
-      // 1. Read the file from local storage using RNFS
-      // 2. Upload via HTTP to NAS endpoint
-      // 3. Handle authentication and SSL
-
       const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
 
-      // Mock upload - would implement actual HTTP PUT/POST request here
-      // const fileContent = await RNFS.readFile(photo.uri, 'base64');
-      return true; // Assume success for demo
+      const headers: { [key: string]: string } = {
+          'Content-Type': photo.type || 'application/octet-stream',
+      };
+
+      if (config.username && config.password) {
+        // Base64 encode credentials
+        const input = `${config.username}:${config.password}`;
+        let credentials = '';
+
+        if (typeof global.btoa === 'function') {
+             credentials = global.btoa(input);
+        } else {
+            // Polyfill for base64
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+            let str = input;
+            for (let block = 0, charCode, i = 0, map = chars;
+            str.charAt(i | 0) || (map = '=', i % 1);
+            credentials += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+              charCode = str.charCodeAt(i += 3 / 4);
+              if (charCode > 0xFF) {
+                // simple validation
+                // throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+              }
+              block = block << 8 | charCode;
+            }
+        }
+        headers['Authorization'] = `Basic ${credentials}`;
+      }
+
+      // Use RNFS.uploadFiles for proper binary upload
+      const uploadResult = await RNFS.uploadFiles({
+          toUrl: uploadUrl,
+          files: [{
+              name: photo.filename,
+              filename: photo.filename,
+              filepath: photo.uri,
+              filetype: photo.type || 'image/jpeg',
+          }],
+          method: 'PUT', // WebDAV typically uses PUT for file uploads
+          headers: headers,
+      }).promise;
+
+      if (uploadResult.statusCode >= 200 && uploadResult.statusCode < 300) {
+          return true;
+      } else {
+          console.error(`NAS upload failed with status: ${uploadResult.statusCode}`);
+          return false;
+      }
     } catch (error) {
       console.error('NAS upload failed:', error);
       return false;
@@ -188,7 +228,11 @@ class NasSyncService {
     let successful = 0;
     let failed = 0;
 
-    for (const photo of photos) {
+    const photosToSync = config.syncFavoritesOnly
+      ? photos.filter(p => p.isFavorite)
+      : photos;
+
+    for (const photo of photosToSync) {
       try {
         const uploaded = await this.uploadPhoto(photo, config);
         if (uploaded) {

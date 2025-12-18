@@ -108,4 +108,7 @@ jest.mock('react-native-fs', () => ({
   readFile: jest.fn(() => Promise.resolve('base64content')),
   exists: jest.fn(() => Promise.resolve(true)),
   mkdir: jest.fn(() => Promise.resolve()),
+  uploadFiles: jest.fn(() => ({
+    promise: Promise.resolve({ statusCode: 200, body: 'success' })
+  })),
 }));

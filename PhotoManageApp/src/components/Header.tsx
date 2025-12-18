@@ -19,6 +19,24 @@ const Header: React.FC<HeaderProps> = ({ photoCount, onImport, isLoading }) => {
       </View>
       <View style={styles.buttonContainer}>
         <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => navigation.navigate('Search')}
+        >
+           <Text style={styles.iconButtonText}>🔍</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => navigation.navigate('Map')}
+        >
+           <Text style={styles.iconButtonText}>🗺️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => navigation.navigate('Settings')}
+        >
+           <Text style={styles.iconButtonText}>⚙️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={styles.importButton}
           onPress={() => navigation.navigate('Albums')}
         >
@@ -89,6 +107,20 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  iconButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 44,
+    height: 44,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 22,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+  },
+  iconButtonText: {
+    fontSize: 20,
   },
 });
 

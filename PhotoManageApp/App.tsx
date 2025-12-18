@@ -16,6 +16,9 @@ import { RootStackParamList } from './src/types/navigation';
 import GalleryScreen from './src/screens/GalleryScreen';
 import AlbumsScreen from './src/screens/AlbumsScreen';
 import AlbumPhotosScreen from './src/screens/AlbumPhotosScreen';
+import SearchScreen from './src/screens/SearchScreen';
+import MapScreen from './src/screens/MapScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -30,6 +33,9 @@ function App() {
           <Stack.Screen name="Gallery" component={GalleryScreen} />
           <Stack.Screen name="Albums" component={AlbumsScreen} />
           <Stack.Screen name="AlbumPhotos" component={AlbumPhotosScreen} />
+          <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="Map" component={MapScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

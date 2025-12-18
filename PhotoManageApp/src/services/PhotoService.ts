@@ -287,6 +287,29 @@ class PhotoService {
       throw new Error(`Failed to copy file from ${sourcePath} to ${destPath}`);
     }
   }
+
+  /**
+   * Favorites Management
+   */
+
+  static async toggleFavorite(photoId: string): Promise<boolean> {
+    const photos = await this.loadPhotos();
+    const photoIndex = photos.findIndex(p => p.id === photoId);
+
+    if (photoIndex !== -1) {
+      const isFavorite = !photos[photoIndex].isFavorite;
+      photos[photoIndex].isFavorite = isFavorite;
+      await this.savePhotos(photos);
+      return isFavorite;
+    }
+
+    return false;
+  }
+
+  static async getFavoritePhotos(): Promise<Photo[]> {
+    const photos = await this.loadPhotos();
+    return photos.filter(p => p.isFavorite);
+  }
 }
 
 export default PhotoService;

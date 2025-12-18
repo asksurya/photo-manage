@@ -7,6 +7,7 @@ export interface Photo {
   width?: number;
   height?: number;
   timestamp: number;
+  isFavorite?: boolean;
   exif?: {
     DateTimeOriginal?: string;
     GPSLatitude?: number;
@@ -50,6 +51,7 @@ export interface NasConfig {
   password: string;
   useHttps?: boolean;
   remotePath?: string;
+  syncFavoritesOnly?: boolean;
 }
 
 export enum CategoryType {
