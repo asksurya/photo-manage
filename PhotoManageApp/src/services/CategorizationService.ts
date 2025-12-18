@@ -1,4 +1,5 @@
 import { Photo, PhotoPair, CategoryType } from '../types/photo';
+import MetadataService from './MetadataService';
 
 interface CategoryGroup {
   id: string;
@@ -47,7 +48,7 @@ class CategorizationService {
   /**
    * Categorize photos by location (if GPS data exists)
    */
-  static categorizeByLocation(photos: Photo[]): CategoryGroup[] {
+  static async categorizeByLocation(photos: Photo[]): Promise<CategoryGroup[]> {
     const groups = new Map<string, CategoryGroup>();
 
     // Only categorize photos that have GPS data
@@ -64,7 +65,7 @@ class CategorizationService {
       if (!groups.has(locationKey)) {
         groups.set(locationKey, {
           id: `location-${locationKey}`,
-          title: `Location: ${locationKey}`, // Would use actual place names in real implementation
+          title: `Location: ${locationKey}`, // Temporary title
           photos: [],
           pairs: [],
           type: CategoryType.LOCATION,
@@ -73,6 +74,34 @@ class CategorizationService {
 
       groups.get(locationKey)!.photos.push(photo);
     });
+
+    // Fetch actual location names for each group sequentially to respect API rate limits
+    const groupEntries = Array.from(groups.entries());
+    for (const [key, group] of groupEntries) {
+      // Use coordinates from the first photo in the group
+      if (group.photos.length > 0) {
+        const firstPhoto = group.photos[0];
+        if (
+          firstPhoto.exif?.GPSLatitude !== undefined &&
+          firstPhoto.exif?.GPSLatitude !== null &&
+          firstPhoto.exif?.GPSLongitude !== undefined &&
+          firstPhoto.exif?.GPSLongitude !== null
+        ) {
+          try {
+            const placeName = await MetadataService.getLocationName(
+              firstPhoto.exif.GPSLatitude,
+              firstPhoto.exif.GPSLongitude
+            );
+            group.title = placeName;
+
+            // Add a small delay between requests to be nice to the API
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } catch (error) {
+            console.warn(`Failed to get location name for group ${key}`, error);
+          }
+        }
+      }
+    }
 
     // Add photos without location to a separate group
     const photosWithoutLocation = photos.filter(photo =>
@@ -136,10 +165,11 @@ class CategorizationService {
   /**
    * Get all categorization options
    */
-  static getAllCategories(photos: Photo[]): { [key in CategoryType]: CategoryGroup[] } {
+  static async getAllCategories(photos: Photo[]): Promise<{ [key in CategoryType]: CategoryGroup[] }> {
+    const locationGroups = await this.categorizeByLocation(photos);
     return {
       [CategoryType.DATE]: this.categorizeByDate(photos),
-      [CategoryType.LOCATION]: this.categorizeByLocation(photos),
+      [CategoryType.LOCATION]: locationGroups,
       [CategoryType.CONTENT]: this.categorizeByContent(photos),
     };
   }
