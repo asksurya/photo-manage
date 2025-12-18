@@ -2,9 +2,50 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Photo, NasConfig } from '../types/photo';
 import RNFS from 'react-native-fs';
 import Exif from 'react-native-exif';
+import { SMB2Client } from 'react-native-smb';
 
 class NasSyncService {
   private static SYNC_STATUS_KEY = '@photo_manage_sync_status';
+
+  /**
+   * Helper to parse SMB path
+   */
+  private static parseSmbPath(remotePath: string | undefined, host: string): { shareName: string, relativePath: string } {
+      let pathStr = remotePath || '';
+      let shareName = '';
+      let relativePath = '';
+
+      // Remove smb:// prefix
+      if (pathStr.startsWith('smb://')) {
+          pathStr = pathStr.substring(6);
+          // Check if host is part of the path (standard smb URI)
+          // Split by slash
+          const parts = pathStr.split('/');
+          // If first part is host (matches config.host), then next is share
+          if (parts.length > 0 && parts[0] === host) {
+              // It's smb://host/share/path
+              if (parts.length > 1) {
+                  shareName = parts[1];
+                  relativePath = parts.slice(2).join('/');
+              }
+          } else {
+              // Assume it's smb://share/path
+              if (parts.length > 0) {
+                  shareName = parts[0];
+                  relativePath = parts.slice(1).join('/');
+              }
+          }
+      } else {
+          // Just /share/path
+          const parts = pathStr.split('/').filter(p => p.length > 0);
+          if (parts.length > 0) {
+              shareName = parts[0];
+              relativePath = parts.slice(1).join('/');
+          }
+      }
+
+      return { shareName, relativePath };
+  }
 
   /**
    * Test NAS connection
@@ -15,6 +56,34 @@ class NasSyncService {
 
       if (!host || !username || !password) {
         return false;
+      }
+
+      // Check if SMB
+      if (port === 445 || (remotePath && remotePath.startsWith('smb://'))) {
+        try {
+          const client = await this.initializeSmbClient(config);
+          if (client) {
+             // Try to list the share/path to verify connection
+             // Since initializeSmbClient doesn't connect, we need to try an operation.
+             // Usually SMB clients connect on demand or we can call connect.
+             // But my type def has connect method.
+             return new Promise((resolve) => {
+               client.connect((err: any) => {
+                 if (err) {
+                   console.error('SMB Connection failed:', err);
+                   resolve(false);
+                 } else {
+                   client.disconnect(() => {});
+                   resolve(true);
+                 }
+               });
+             });
+          }
+          return false;
+        } catch (e) {
+          console.error('SMB init failed:', e);
+          return false;
+        }
       }
 
       const protocol = useHttps ? 'https' : 'http';
@@ -50,6 +119,38 @@ class NasSyncService {
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
+      // Check if SMB
+      if (config.port === 445 || (config.remotePath && config.remotePath.startsWith('smb://'))) {
+         const client = await this.initializeSmbClient(config);
+         if (!client) return false;
+
+         return new Promise((resolve) => {
+           client.connect((err: any) => {
+             if (err) {
+               console.error('SMB upload connect failed:', err);
+               resolve(false);
+               return;
+             }
+
+             const { relativePath } = this.parseSmbPath(config.remotePath, config.host);
+
+             const remoteFileName = relativePath ? `${relativePath}/${photo.filename}` : photo.filename;
+             const localPath = photo.uri.startsWith('file://') ? photo.uri.substring(7) : photo.uri;
+
+             client.upload(localPath, remoteFileName, (err: any, _id: string) => {
+               client.disconnect(() => {});
+               if (err) {
+                 console.error('SMB upload failed:', err);
+                 resolve(false);
+               } else {
+                 resolve(true);
+               }
+             });
+           });
+         });
+      }
+
+      // HTTP Upload
       // In a real implementation, this would:
       // 1. Read the file from local storage using RNFS
       // 2. Upload via HTTP to NAS endpoint
@@ -73,6 +174,12 @@ class NasSyncService {
    */
   static async downloadPhoto(remotePath: string, config: NasConfig): Promise<Photo | null> {
     try {
+      // Check if SMB
+      if (config.port === 445 || (config.remotePath && config.remotePath.startsWith('smb://'))) {
+        // SMB download implementation
+        return null;
+      }
+
       console.log(`Downloading from ${remotePath}`);
 
       // 1. Construct URL
@@ -245,9 +352,26 @@ class NasSyncService {
     return null;
   }
 
-  static async initializeSmbClient(_config: NasConfig): Promise<any> {
-    // Future implementation for SMB sync
-    return null;
+  static async initializeSmbClient(config: NasConfig): Promise<SMB2Client | null> {
+    try {
+      const { host, username, password, remotePath } = config;
+
+      const { shareName } = this.parseSmbPath(remotePath, host);
+
+      if (!shareName) {
+          console.warn('Cannot determine SMB share name from remotePath');
+          return null;
+      }
+
+      // Initialize SMB2Client
+      // host, username, password, shareName
+      const client = new SMB2Client(host, username, password, shareName);
+
+      return client;
+    } catch (error) {
+      console.error('Failed to initialize SMB client:', error);
+      return null;
+    }
   }
 }
 
