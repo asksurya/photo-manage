@@ -7,6 +7,74 @@ class NasSyncService {
   private static SYNC_STATUS_KEY = '@photo_manage_sync_status';
 
   /**
+   * Helper to encode string to base64
+   */
+  private static btoa(input: string): string {
+    if (typeof global.btoa === 'function') {
+      return global.btoa(input);
+    }
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = input;
+    let output = '';
+
+    for (let block = 0, charCode, i = 0, map = chars;
+    str.charAt(i | 0) || (map = '=', i % 1);
+    output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+      charCode = str.charCodeAt(i += 3 / 4);
+      if (charCode > 0xFF) {
+        throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+      }
+      block = block << 8 | charCode;
+    }
+
+    return output;
+  }
+
+  /**
+   * Helper to convert base64 string to Uint8Array
+   */
+  private static base64ToUint8Array(base64: string): Uint8Array {
+    const binaryString = typeof atob === 'function' ? atob(base64) : (function(b64) {
+      // Simple polyfill for atob if needed, but for now let's assume standard behavior or minimal polyfill
+      // Since we are reading from RNFS as base64, we need to decode it to binary
+      // A robust way without atob (if missing) is needed.
+      // However, React Native usually has atob/btoa available in JS Debugger but maybe not in JSC/Hermes without polyfill.
+      // Let's implement a decoder or use Buffer if available (node environment for tests).
+
+      if (typeof Buffer !== 'undefined') {
+        return Buffer.from(b64, 'base64').toString('binary');
+      }
+
+      // Basic decoder
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+      let str = b64.replace(/=+$/, '');
+      let output = '';
+
+      if (str.length % 4 == 1) {
+        throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
+      }
+      for (let bc = 0, bs = 0, buffer, i = 0;
+        buffer = str.charAt(i++);
+
+        ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+          bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+      ) {
+        buffer = chars.indexOf(buffer);
+      }
+
+      return output;
+    })(base64);
+
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  /**
    * Test NAS connection
    */
   static async testConnection(config: NasConfig): Promise<boolean> {
@@ -27,7 +95,7 @@ class NasSyncService {
 
       const url = `${protocol}://${host}:${actualPort}${path}`;
 
-      const credentials = btoa(`${username}:${password}`);
+      const credentials = this.btoa(`${username}:${password}`);
 
       console.log(`Testing connection to ${url}`);
 
@@ -50,18 +118,41 @@ class NasSyncService {
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would:
-      // 1. Read the file from local storage using RNFS
-      // 2. Upload via HTTP to NAS endpoint
-      // 3. Handle authentication and SSL
-
       const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
 
-      // Mock upload - would implement actual HTTP PUT/POST request here
-      // const fileContent = await RNFS.readFile(photo.uri, 'base64');
-      return true; // Assume success for demo
+      // 1. Read the file from local storage using RNFS
+      // RNFS.readFile reads file as base64 by default when encoding is not specified,
+      // but explicitly asking for 'base64' is safer.
+      const fileContentBase64 = await RNFS.readFile(photo.uri, 'base64');
+
+      // 2. Convert to Uint8Array for binary upload
+      const fileContentBinary = this.base64ToUint8Array(fileContentBase64);
+
+      // 3. Prepare headers
+      const headers: { [key: string]: string } = {
+        'Content-Type': 'application/octet-stream',
+      };
+
+      if (config.username && config.password) {
+        const credentials = this.btoa(`${config.username}:${config.password}`);
+        headers['Authorization'] = `Basic ${credentials}`;
+      }
+
+      // 4. Upload via HTTP to NAS endpoint
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: headers,
+        body: fileContentBinary,
+      });
+
+      if (!response.ok) {
+        console.error(`Upload failed with status: ${response.status}`);
+        return false;
+      }
+
+      return true;
     } catch (error) {
       console.error('NAS upload failed:', error);
       return false;
@@ -95,38 +186,8 @@ class NasSyncService {
       // Prepare headers
       const headers: { [key: string]: string } = {};
       if (config.username && config.password) {
-        const credentials = `${config.username}:${config.password}`;
-        // Note: Buffer is not available in RN by default, often used with 'buffer' package or btoa
-        // Using a simpler approach if Buffer is not available or assume 'buffer' polyfill
-        // But since this is TS and RN environment, let's use a simple base64 helper if possible or assume Buffer is available via polyfill
-        // If not, we can use a custom function.
-        // For this environment, let's assume we can use a basic base64 implementation.
-        // Actually, RN often provides 'btoa' or we can import 'buffer'.
-        // Since I don't want to add dependencies, I will check if btoa is available or implement simple one.
-        // However, 'react-native' exposes 'btoa' on global in newer versions.
-
-        // Let's implement a simple base64 encoder to be safe if Buffer is missing
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-        const btoa = (input: string) => {
-          let str = input;
-          let output = '';
-
-          for (let block = 0, charCode, i = 0, map = chars;
-          str.charAt(i | 0) || (map = '=', i % 1);
-          output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
-            charCode = str.charCodeAt(i += 3 / 4);
-            if (charCode > 0xFF) {
-              throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
-            }
-            block = block << 8 | charCode;
-          }
-
-          return output;
-        };
-
-        // Try to use global btoa if available
-        const base64 = typeof global.btoa === 'function' ? global.btoa(credentials) : btoa(credentials);
-        headers['Authorization'] = `Basic ${base64}`;
+        const credentials = this.btoa(`${config.username}:${config.password}`);
+        headers['Authorization'] = `Basic ${credentials}`;
       }
 
       // 3. Download file
