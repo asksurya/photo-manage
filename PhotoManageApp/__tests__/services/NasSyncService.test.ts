@@ -103,6 +103,73 @@ describe('NasSyncService', () => {
     });
   });
 
+  describe('uploadPhoto', () => {
+    const mockPhoto = {
+      id: '1',
+      uri: '/path/to/photo.jpg',
+      filename: 'photo.jpg',
+      type: 'image/jpeg',
+      size: 1024,
+      width: 100,
+      height: 100,
+      timestamp: 1629876543210,
+    };
+
+    it('should upload photo correctly', async () => {
+      // Mock RNFS.readFile
+      const mockBase64 = 'SGVsbG8gV29ybGQ='; // "Hello World"
+      (RNFS.readFile as jest.Mock).mockResolvedValue(mockBase64);
+
+      // Mock fetch
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+      });
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(true);
+
+      expect(RNFS.readFile).toHaveBeenCalledWith(mockPhoto.uri, 'base64');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://192.168.1.100:8080/photos/photo.jpg',
+        expect.objectContaining({
+          method: 'PUT',
+          headers: expect.objectContaining({
+            'Content-Type': 'image/jpeg',
+            'Authorization': 'Basic ' + global.btoa('user:password'),
+          }),
+          body: expect.any(Uint8Array), // Body should be Uint8Array
+        })
+      );
+    });
+
+    it('should handle upload failure', async () => {
+      // Mock RNFS.readFile
+      (RNFS.readFile as jest.Mock).mockResolvedValue('');
+
+      // Mock fetch failure
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle errors during upload', async () => {
+      // Mock RNFS.readFile failure
+      (RNFS.readFile as jest.Mock).mockRejectedValue(new Error('File read error'));
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(false);
+    });
+  });
+
   describe('testConnection', () => {
     it('should return true when connection is successful', async () => {
       mockFetch.mockResolvedValue({
