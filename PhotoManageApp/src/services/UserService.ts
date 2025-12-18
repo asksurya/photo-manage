@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfile, NasConfig } from '../types/photo';
+import { AuthToken } from '../types/auth';
 
 class UserService {
   private static USER_PROFILE_KEY = '@photo_manage_user_profile';
@@ -36,9 +37,9 @@ class UserService {
   /**
    * Save authentication token
    */
-  static async saveAuthToken(token: string): Promise<void> {
+  static async saveAuthToken(token: AuthToken): Promise<void> {
     try {
-      await AsyncStorage.setItem(this.AUTH_TOKEN_KEY, token);
+      await AsyncStorage.setItem(this.AUTH_TOKEN_KEY, JSON.stringify(token));
     } catch {
       console.error('Error saving auth token');
       throw new Error('Failed to save authentication token');
@@ -46,11 +47,28 @@ class UserService {
   }
 
   /**
-   * Get authentication token
+   * Get authentication session (full token object)
+   */
+  static async getAuthSession(): Promise<AuthToken | null> {
+    try {
+      const tokenData = await AsyncStorage.getItem(this.AUTH_TOKEN_KEY);
+      if (tokenData) {
+        return JSON.parse(tokenData);
+      }
+      return null;
+    } catch {
+      console.error('Error getting auth session');
+      return null;
+    }
+  }
+
+  /**
+   * Get authentication access token string
    */
   static async getAuthToken(): Promise<string | null> {
     try {
-      return await AsyncStorage.getItem(this.AUTH_TOKEN_KEY);
+      const session = await this.getAuthSession();
+      return session ? session.accessToken : null;
     } catch {
       console.error('Error getting auth token');
       return null;
@@ -74,9 +92,19 @@ class UserService {
    */
   static async isAuthenticated(): Promise<boolean> {
     try {
-      const token = await this.getAuthToken();
+      const token = await this.getAuthSession();
+      if (!token) return false;
+
+      // Check if token is expired
+      const expirationTime = token.issuedAt + (token.expiresIn * 1000);
+      if (Date.now() >= expirationTime) {
+        // Here we would typically try to refresh the token using refreshToken
+        // For now, we consider it not authenticated if access token is expired
+        return false;
+      }
+
       const profile = await this.loadUserProfile();
-      return !!(token && profile);
+      return !!profile;
     } catch {
       return false;
     }
@@ -121,6 +149,31 @@ class UserService {
   }
 
   /**
+   * Generate a secure-looking token (Simulation)
+   */
+  private static generateAuthToken(userId: string): AuthToken {
+    const now = Date.now();
+    // Simulate a JWT structure or just random strings
+    // In a real app, this would come from the auth provider
+    const randomString = (length: number) => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let result = '';
+      for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+
+    return {
+      accessToken: `ey${randomString(20)}.${randomString(50)}.${randomString(40)}`, // Simulate JWT format
+      refreshToken: randomString(64),
+      expiresIn: 3600, // 1 hour
+      issuedAt: now,
+      tokenType: 'Bearer'
+    };
+  }
+
+  /**
    * Create basic profile (foundation for user creation)
    */
   static async createBasicProfile(email: string, displayName: string): Promise<UserProfile> {
@@ -131,7 +184,10 @@ class UserService {
     };
 
     await this.saveUserProfile(profile);
-    await this.saveAuthToken(`token-${profile.id}`); // Mock token for now
+
+    // Generate a structured auth token instead of a mock string
+    const token = this.generateAuthToken(profile.id);
+    await this.saveAuthToken(token);
 
     return profile;
   }
