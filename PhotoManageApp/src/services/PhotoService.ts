@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Photo, PhotoPair, Album } from '../types/photo';
-import RNFS from 'react-native-fs'; // Ready for file operations
+import RNFS from 'react-native-fs'; // Enabled for file operations
 import Exif from 'react-native-exif';
 
 class PhotoService {
