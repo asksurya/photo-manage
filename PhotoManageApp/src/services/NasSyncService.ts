@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Photo, NasConfig } from '../types/photo';
 import RNFS from 'react-native-fs';
 import Exif from 'react-native-exif';
@@ -10,17 +11,34 @@ class NasSyncService {
    */
   static async testConnection(config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would make an HTTP request to the NAS
-      // For now, just check if config is valid
-      const { host, port = 80, username, password } = config;
+      const { host, port, username, password, useHttps, remotePath } = config;
 
       if (!host || !username || !password) {
         return false;
       }
 
-      // Mock connection test - would implement actual HTTP(S) request here
-      console.log(`Testing connection to ${host}:${port} as ${username}`);
-      return true; // Assume success for demo
+      const protocol = useHttps ? 'https' : 'http';
+      const actualPort = port || (useHttps ? 443 : 80);
+
+      let path = remotePath || '/';
+      if (!path.startsWith('/')) {
+        path = `/${path}`;
+      }
+
+      const url = `${protocol}://${host}:${actualPort}${path}`;
+
+      const credentials = btoa(`${username}:${password}`);
+
+      console.log(`Testing connection to ${url}`);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Basic ${credentials}`
+        }
+      });
+
+      return response.ok;
     } catch (error) {
       console.error('NAS connection test failed:', error);
       return false;
@@ -192,9 +210,14 @@ class NasSyncService {
    */
   static async getLastSyncTime(): Promise<Date | null> {
     try {
-      // Implementation for tracking sync status
-      // Would store sync timestamps in AsyncStorage
-      return new Date(); // Return current time as mock
+      const timestamp = await AsyncStorage.getItem(this.SYNC_STATUS_KEY);
+      if (timestamp) {
+        const parsed = parseInt(timestamp, 10);
+        if (!isNaN(parsed)) {
+          return new Date(parsed);
+        }
+      }
+      return null;
     } catch (error) {
       console.error('Error getting last sync time:', error);
       return null;
@@ -206,8 +229,7 @@ class NasSyncService {
    */
   static async setLastSyncTime(timestamp: number): Promise<void> {
     try {
-      // Implementation for tracking sync status
-      // Would store sync timestamps in AsyncStorage
+      await AsyncStorage.setItem(this.SYNC_STATUS_KEY, timestamp.toString());
       console.log(`Last sync time updated to: ${new Date(timestamp).toISOString()}`);
     } catch (error) {
       console.error('Error setting last sync time:', error);

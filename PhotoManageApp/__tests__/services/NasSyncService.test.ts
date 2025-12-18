@@ -2,6 +2,17 @@ import NasSyncService from '../../src/services/NasSyncService';
 import { NasConfig } from '../../src/types/photo';
 import RNFS from 'react-native-fs';
 import Exif from 'react-native-exif';
+import { jest } from '@jest/globals';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Mock fetch
+const mockFetch = jest.fn();
+global.fetch = mockFetch as unknown as typeof fetch;
+
+// Mock btoa if not present (Node environment)
+if (!global.btoa) {
+  global.btoa = (str: string) => Buffer.from(str).toString('base64');
+}
 
 describe('NasSyncService', () => {
   const mockConfig: NasConfig = {
@@ -13,75 +24,208 @@ describe('NasSyncService', () => {
     remotePath: '/photos',
   };
 
-  it('should download photo correctly', async () => {
-    const remotePath = '/2023/photo.jpg';
+  afterEach(() => {
+    jest.clearAllMocks();
+    mockFetch.mockClear();
+  });
 
-    // Setup mocks
-    (RNFS.downloadFile as jest.Mock).mockReturnValue({
-      promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
+  describe('downloadPhoto', () => {
+    it('should download photo correctly', async () => {
+      const remotePath = '/2023/photo.jpg';
+
+      // Setup mocks
+      (RNFS.downloadFile as jest.Mock).mockReturnValue({
+        promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
+      });
+      (RNFS.stat as jest.Mock).mockResolvedValue({
+        size: 2048,
+        mtime: new Date(),
+        ctime: new Date(),
+        isFile: () => true,
+      });
+      (Exif.getExif as jest.Mock).mockResolvedValue({
+        DateTimeOriginal: '2023:01:01 12:00:00',
+        Make: 'Camera',
+        Model: 'Model',
+      });
+
+      const photo = await NasSyncService.downloadPhoto(remotePath, mockConfig);
+
+      expect(photo).not.toBeNull();
+      if (photo) {
+        expect(photo.filename).toBe('photo.jpg');
+        expect(photo.size).toBe(2048);
+        expect(photo.exif?.Make).toBe('Camera');
+        expect(photo.type).toBe('image/jpeg');
+
+        // Check auth header
+        const expectedAuth = 'Basic ' + Buffer.from('user:password').toString('base64');
+
+        expect(RNFS.downloadFile).toHaveBeenCalledWith(expect.objectContaining({
+          fromUrl: 'http://192.168.1.100:8080/photos/2023/photo.jpg',
+          toFile: expect.stringContaining('photo.jpg'),
+          headers: expect.objectContaining({
+              Authorization: expectedAuth
+          })
+        }));
+      }
     });
-    (RNFS.stat as jest.Mock).mockResolvedValue({
-      size: 2048,
-      mtime: new Date(),
-      ctime: new Date(),
-      isFile: () => true,
+
+    it('should detect mime type correctly', async () => {
+      // Setup mocks
+      (RNFS.downloadFile as jest.Mock).mockReturnValue({
+        promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
+      });
+      (RNFS.stat as jest.Mock).mockResolvedValue({
+        size: 2048,
+      });
+
+      // Test PNG
+      let photo = await NasSyncService.downloadPhoto('test.png', mockConfig);
+      expect(photo?.type).toBe('image/png');
+
+      // Test RAW
+      photo = await NasSyncService.downloadPhoto('test.ARW', mockConfig);
+      expect(photo?.type).toBe('image/x-raw');
     });
-    (Exif.getExif as jest.Mock).mockResolvedValue({
-      DateTimeOriginal: '2023:01:01 12:00:00',
-      Make: 'Camera',
-      Model: 'Model',
+
+    it('should handle download failure', async () => {
+      const remotePath = '/2023/photo.jpg';
+
+      // Setup mocks to fail
+      (RNFS.downloadFile as jest.Mock).mockReturnValue({
+        promise: Promise.reject(new Error('Download failed'))
+      });
+
+      const photo = await NasSyncService.downloadPhoto(remotePath, mockConfig);
+
+      expect(photo).toBeNull();
     });
+  });
 
-    const photo = await NasSyncService.downloadPhoto(remotePath, mockConfig);
+  describe('testConnection', () => {
+    it('should return true when connection is successful', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+      });
 
-    expect(photo).not.toBeNull();
-    if (photo) {
-      expect(photo.filename).toBe('photo.jpg');
-      expect(photo.size).toBe(2048);
-      expect(photo.exif?.Make).toBe('Camera');
-      expect(photo.type).toBe('image/jpeg');
+      const result = await NasSyncService.testConnection(mockConfig);
 
-      // Check auth header
-      const expectedAuth = 'Basic ' + Buffer.from('user:password').toString('base64');
+      expect(result).toBe(true);
 
-      expect(RNFS.downloadFile).toHaveBeenCalledWith(expect.objectContaining({
-        fromUrl: 'http://192.168.1.100:8080/photos/2023/photo.jpg',
-        toFile: expect.stringContaining('photo.jpg'),
-        headers: expect.objectContaining({
-            Authorization: expectedAuth
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://192.168.1.100:8080/photos',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            Authorization: 'Basic ' + global.btoa('user:password'),
+          }),
         })
-      }));
-    }
+      );
+    });
+
+    it('should handle remotePath without leading slash', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+      });
+
+      const config = { ...mockConfig, remotePath: 'photos' };
+      const result = await NasSyncService.testConnection(config);
+
+      expect(result).toBe(true);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://192.168.1.100:8080/photos',
+        expect.anything()
+      );
+    });
+
+    it('should return false when connection fails', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+      });
+
+      const result = await NasSyncService.testConnection(mockConfig);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false when fetch throws an error', async () => {
+      mockFetch.mockRejectedValue(new Error('Network error'));
+
+      const result = await NasSyncService.testConnection(mockConfig);
+
+      expect(result).toBe(false);
+    });
   });
 
-  it('should detect mime type correctly', async () => {
-    // Setup mocks
-    (RNFS.downloadFile as jest.Mock).mockReturnValue({
-      promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
-    });
-    (RNFS.stat as jest.Mock).mockResolvedValue({
-      size: 2048,
+  describe('getLastSyncTime', () => {
+    it('should return the last sync time when it exists', async () => {
+      const mockTimestamp = 1629876543210;
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValue(mockTimestamp.toString());
+
+      const result = await NasSyncService.getLastSyncTime();
+
+      expect(AsyncStorage.getItem).toHaveBeenCalledWith('@photo_manage_sync_status');
+      expect(result).toEqual(new Date(mockTimestamp));
     });
 
-    // Test PNG
-    let photo = await NasSyncService.downloadPhoto('test.png', mockConfig);
-    expect(photo?.type).toBe('image/png');
+    it('should return null when no sync time exists', async () => {
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
 
-    // Test RAW
-    photo = await NasSyncService.downloadPhoto('test.ARW', mockConfig);
-    expect(photo?.type).toBe('image/x-raw');
+      const result = await NasSyncService.getLastSyncTime();
+
+      expect(AsyncStorage.getItem).toHaveBeenCalledWith('@photo_manage_sync_status');
+      expect(result).toBeNull();
+    });
+
+    it('should return null when there is an error retrieving the sync time', async () => {
+      (AsyncStorage.getItem as jest.Mock).mockRejectedValue(new Error('AsyncStorage error'));
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const result = await NasSyncService.getLastSyncTime();
+
+      expect(AsyncStorage.getItem).toHaveBeenCalledWith('@photo_manage_sync_status');
+      expect(result).toBeNull();
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error getting last sync time:', expect.any(Error));
+
+      consoleErrorSpy.mockRestore();
+    });
   });
 
-  it('should handle download failure', async () => {
-    const remotePath = '/2023/photo.jpg';
+  describe('setLastSyncTime', () => {
+    it('should store the sync timestamp correctly', async () => {
+      const mockTimestamp = 1629876543210;
+      (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
+      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
-    // Setup mocks to fail
-    (RNFS.downloadFile as jest.Mock).mockReturnValue({
-      promise: Promise.reject(new Error('Download failed'))
+      await NasSyncService.setLastSyncTime(mockTimestamp);
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        '@photo_manage_sync_status',
+        mockTimestamp.toString()
+      );
+
+      consoleLogSpy.mockRestore();
     });
 
-    const photo = await NasSyncService.downloadPhoto(remotePath, mockConfig);
+    it('should log an error when storing the sync time fails', async () => {
+      const mockTimestamp = 1629876543210;
+      (AsyncStorage.setItem as jest.Mock).mockRejectedValue(new Error('AsyncStorage error'));
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(photo).toBeNull();
+      await NasSyncService.setLastSyncTime(mockTimestamp);
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        '@photo_manage_sync_status',
+        mockTimestamp.toString()
+      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error setting last sync time:', expect.any(Error));
+
+      consoleErrorSpy.mockRestore();
+    });
   });
 });
