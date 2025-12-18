@@ -31,7 +31,7 @@ jest.mock('react-native-fs', () => ({
   getFSInfo: jest.fn(),
   getAllExternalFilesDirs: jest.fn(),
   unlink: jest.fn(() => Promise.resolve()),
-  exists: jest.fn(() => Promise.resolve(false)),
+  exists: jest.fn(() => Promise.resolve(true)),
   stopDownload: jest.fn(),
   resumeDownload: jest.fn(),
   isResumable: jest.fn(),
@@ -42,8 +42,14 @@ jest.mock('react-native-fs', () => ({
   existsAssets: jest.fn(),
   readdir: jest.fn(),
   setReadable: jest.fn(),
-  stat: jest.fn(),
-  readFile: jest.fn(() => Promise.resolve('')),
+  stat: jest.fn(() => Promise.resolve({
+    size: 1024,
+    mtime: new Date(),
+    ctime: new Date(),
+    isFile: () => true,
+    isDirectory: () => false,
+  })),
+  readFile: jest.fn(() => Promise.resolve('base64content')),
   read: jest.fn(),
   readFileAssets: jest.fn(),
   hash: jest.fn(),
@@ -53,8 +59,12 @@ jest.mock('react-native-fs', () => ({
   writeFile: jest.fn(() => Promise.resolve()),
   appendFile: jest.fn(),
   write: jest.fn(),
-  downloadFile: jest.fn(),
-  uploadFiles: jest.fn(),
+  downloadFile: jest.fn(() => ({
+    promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
+  })),
+  uploadFiles: jest.fn(() => ({
+    promise: Promise.resolve({ statusCode: 200, body: 'success' })
+  })),
   touch: jest.fn(),
   MainBundlePath: '/mock/MainBundlePath',
   CachesDirectoryPath: '/mock/CachesDirectoryPath',
@@ -91,24 +101,3 @@ jest.mock('react-native-gesture-handler', () => {
     /* etc. */
   };
 });
-
-jest.mock('react-native-fs', () => ({
-  DocumentDirectoryPath: '/mock/document/path',
-  CachesDirectoryPath: '/mock/caches/path',
-  downloadFile: jest.fn(() => ({
-    promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
-  })),
-  stat: jest.fn(() => Promise.resolve({
-    size: 1024,
-    mtime: new Date(),
-    ctime: new Date(),
-    isFile: () => true,
-    isDirectory: () => false,
-  })),
-  readFile: jest.fn(() => Promise.resolve('base64content')),
-  exists: jest.fn(() => Promise.resolve(true)),
-  mkdir: jest.fn(() => Promise.resolve()),
-  uploadFiles: jest.fn(() => ({
-    promise: Promise.resolve({ statusCode: 200, body: 'success' })
-  })),
-}));

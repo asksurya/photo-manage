@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Photo, NasConfig } from '../types/photo';
 import RNFS from 'react-native-fs';
 import Exif from 'react-native-exif';
+import { createClient, AuthType } from 'webdav';
 
 class NasSyncService {
   private static SYNC_STATUS_KEY = '@photo_manage_sync_status';
@@ -50,40 +51,58 @@ class NasSyncService {
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
-      const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
+      // 1. Construct upload URL
+      const { host, port, username, password, useHttps, remotePath } = config;
+      const protocol = useHttps ? 'https' : 'http';
+      const actualPort = port || (useHttps ? 443 : 80);
+      const basePath = remotePath || '/photos';
+      // Ensure no double slashes and correct leading slash
+      const cleanBasePath = basePath.startsWith('/') ? basePath : `/${basePath}`;
+      // Remove trailing slash from base path if present to avoid double slash with filename
+      const finalBasePath = cleanBasePath.replace(/\/$/, '');
+      const uploadUrl = `${protocol}://${host}:${actualPort}${finalBasePath}/${photo.filename}`;
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
+
+      // 2. Read the file from local storage using RNFS
+      // Note: RNFS.readFile supports 'base64'.
+      // Large files might need streaming or chunked upload, but for this implementation
+      // we follow the requirement of reading file content and uploading via fetch.
+      // However, we are upgrading to use RNFS.uploadFiles for binary support as per feedback.
 
       const headers: { [key: string]: string } = {
           'Content-Type': photo.type || 'application/octet-stream',
       };
 
-      if (config.username && config.password) {
-        // Base64 encode credentials
-        const input = `${config.username}:${config.password}`;
-        let credentials = '';
+      if (username && password) {
+         const credentials = `${username}:${password}`;
+         // Use existing logic for btoa if global not available
+         const btoa = (input: string) => {
+           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+           let str = input;
+           let output = '';
+           for (let block = 0, charCode, i = 0, map = chars;
+           str.charAt(i | 0) || (map = '=', i % 1);
+           output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+             charCode = str.charCodeAt(i += 3 / 4);
+             block = block << 8 | charCode;
+           }
+           return output;
+         };
 
-        if (typeof global.btoa === 'function') {
-             credentials = global.btoa(input);
-        } else {
-            // Polyfill for base64
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-            let str = input;
-            for (let block = 0, charCode, i = 0, map = chars;
-            str.charAt(i | 0) || (map = '=', i % 1);
-            credentials += map.charAt(63 & block >> 8 - i % 1 * 8)) {
-              charCode = str.charCodeAt(i += 3 / 4);
-              if (charCode > 0xFF) {
-                // simple validation
-                // throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
-              }
-              block = block << 8 | charCode;
-            }
-        }
-        headers['Authorization'] = `Basic ${credentials}`;
+         const encodedAuth = typeof global.btoa === 'function'
+            ? global.btoa(credentials)
+            : btoa(credentials);
+
+         headers['Authorization'] = `Basic ${encodedAuth}`;
       }
 
-      // Use RNFS.uploadFiles for proper binary upload
+      // 5. Upload via HTTP to NAS endpoint
+      // Using RNFS.uploadFiles is robust for binary but harder to mock.
+      // The merge conflict showed two implementations: my new one using uploadFiles vs the incoming main using fetch/Uint8Array.
+      // I will combine them: Prefer uploadFiles if possible, but the fetch+Uint8Array approach is also valid if implemented correctly.
+      // Given I implemented uploadFiles in my branch, I will stick to it as it's cleaner for file uploads.
+
       const uploadResult = await RNFS.uploadFiles({
           toUrl: uploadUrl,
           files: [{
@@ -92,7 +111,7 @@ class NasSyncService {
               filepath: photo.uri,
               filetype: photo.type || 'image/jpeg',
           }],
-          method: 'PUT', // WebDAV typically uses PUT for file uploads
+          method: 'PUT',
           headers: headers,
       }).promise;
 
@@ -102,6 +121,7 @@ class NasSyncService {
           console.error(`NAS upload failed with status: ${uploadResult.statusCode}`);
           return false;
       }
+
     } catch (error) {
       console.error('NAS upload failed:', error);
       return false;
@@ -136,16 +156,7 @@ class NasSyncService {
       const headers: { [key: string]: string } = {};
       if (config.username && config.password) {
         const credentials = `${config.username}:${config.password}`;
-        // Note: Buffer is not available in RN by default, often used with 'buffer' package or btoa
-        // Using a simpler approach if Buffer is not available or assume 'buffer' polyfill
-        // But since this is TS and RN environment, let's use a simple base64 helper if possible or assume Buffer is available via polyfill
-        // If not, we can use a custom function.
-        // For this environment, let's assume we can use a basic base64 implementation.
-        // Actually, RN often provides 'btoa' or we can import 'buffer'.
-        // Since I don't want to add dependencies, I will check if btoa is available or implement simple one.
-        // However, 'react-native' exposes 'btoa' on global in newer versions.
 
-        // Let's implement a simple base64 encoder to be safe if Buffer is missing
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
         const btoa = (input: string) => {
           let str = input;
@@ -256,9 +267,9 @@ class NasSyncService {
     try {
       const timestamp = await AsyncStorage.getItem(this.SYNC_STATUS_KEY);
       if (timestamp) {
-        const parsed = parseInt(timestamp, 10);
-        if (!isNaN(parsed)) {
-          return new Date(parsed);
+        const parsedTimestamp = parseInt(timestamp, 10);
+        if (!isNaN(parsedTimestamp)) {
+          return new Date(parsedTimestamp);
         }
       }
       return null;
@@ -284,9 +295,26 @@ class NasSyncService {
    * Foundation for WebDAV/SMB sync protocols
    * These would require additional native modules
    */
-  static async initializeWebDavClient(_config: NasConfig): Promise<any> {
-    // Future implementation for WebDAV sync
-    return null;
+  static async initializeWebDavClient(config: NasConfig): Promise<any> {
+    const { host, port, username, password, useHttps, remotePath } = config;
+
+    const protocol = useHttps ? 'https' : 'http';
+    const actualPort = port || (useHttps ? 443 : 80);
+
+    let path = remotePath || '/';
+    if (!path.startsWith('/')) {
+      path = `/${path}`;
+    }
+
+    const url = `${protocol}://${host}:${actualPort}${path}`;
+
+    const client = createClient(url, {
+      username,
+      password,
+      authType: AuthType.Password,
+    });
+
+    return client;
   }
 
   static async initializeSmbClient(_config: NasConfig): Promise<any> {
