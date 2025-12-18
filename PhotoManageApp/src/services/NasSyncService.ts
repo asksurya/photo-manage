@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Photo, NasConfig } from '../types/photo';
 // import RNFS from 'react-native-fs'; // For future file operations
 
@@ -115,9 +116,14 @@ class NasSyncService {
    */
   static async getLastSyncTime(): Promise<Date | null> {
     try {
-      // Implementation for tracking sync status
-      // Would store sync timestamps in AsyncStorage
-      return new Date(); // Return current time as mock
+      const timestamp = await AsyncStorage.getItem(this.SYNC_STATUS_KEY);
+      if (timestamp) {
+        const parsed = parseInt(timestamp, 10);
+        if (!isNaN(parsed)) {
+          return new Date(parsed);
+        }
+      }
+      return null;
     } catch (error) {
       console.error('Error getting last sync time:', error);
       return null;
@@ -129,8 +135,7 @@ class NasSyncService {
    */
   static async setLastSyncTime(timestamp: number): Promise<void> {
     try {
-      // Implementation for tracking sync status
-      // Would store sync timestamps in AsyncStorage
+      await AsyncStorage.setItem(this.SYNC_STATUS_KEY, timestamp.toString());
       console.log(`Last sync time updated to: ${new Date(timestamp).toISOString()}`);
     } catch (error) {
       console.error('Error setting last sync time:', error);
