@@ -92,20 +92,4 @@ jest.mock('react-native-gesture-handler', () => {
   };
 });
 
-jest.mock('react-native-fs', () => ({
-  DocumentDirectoryPath: '/mock/document/path',
-  CachesDirectoryPath: '/mock/caches/path',
-  downloadFile: jest.fn(() => ({
-    promise: Promise.resolve({ statusCode: 200, bytesWritten: 1024 })
-  })),
-  stat: jest.fn(() => Promise.resolve({
-    size: 1024,
-    mtime: new Date(),
-    ctime: new Date(),
-    isFile: () => true,
-    isDirectory: () => false,
-  })),
-  readFile: jest.fn(() => Promise.resolve('base64content')),
-  exists: jest.fn(() => Promise.resolve(true)),
-  mkdir: jest.fn(() => Promise.resolve()),
-}));
+// Consolidating react-native-fs mock (merged with the one above)
