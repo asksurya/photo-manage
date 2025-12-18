@@ -212,9 +212,9 @@ class NasSyncService {
     try {
       const timestamp = await AsyncStorage.getItem(this.SYNC_STATUS_KEY);
       if (timestamp) {
-        const parsed = parseInt(timestamp, 10);
-        if (!isNaN(parsed)) {
-          return new Date(parsed);
+        const parsedTimestamp = parseInt(timestamp, 10);
+        if (!isNaN(parsedTimestamp)) {
+          return new Date(parsedTimestamp);
         }
       }
       return null;
