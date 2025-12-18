@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Photo, NasConfig } from '../types/photo';
 import RNFS from 'react-native-fs';
 import Exif from 'react-native-exif';
+import { createClient, AuthType } from 'webdav';
 
 class NasSyncService {
   private static SYNC_STATUS_KEY = '@photo_manage_sync_status';
@@ -309,9 +310,26 @@ class NasSyncService {
    * Foundation for WebDAV/SMB sync protocols
    * These would require additional native modules
    */
-  static async initializeWebDavClient(_config: NasConfig): Promise<any> {
-    // Future implementation for WebDAV sync
-    return null;
+  static async initializeWebDavClient(config: NasConfig): Promise<any> {
+    const { host, port, username, password, useHttps, remotePath } = config;
+
+    const protocol = useHttps ? 'https' : 'http';
+    const actualPort = port || (useHttps ? 443 : 80);
+
+    let path = remotePath || '/';
+    if (!path.startsWith('/')) {
+      path = `/${path}`;
+    }
+
+    const url = `${protocol}://${host}:${actualPort}${path}`;
+
+    const client = createClient(url, {
+      username,
+      password,
+      authType: AuthType.Password,
+    });
+
+    return client;
   }
 
   static async initializeSmbClient(_config: NasConfig): Promise<any> {
