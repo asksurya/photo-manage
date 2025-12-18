@@ -50,18 +50,47 @@ class NasSyncService {
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would:
-      // 1. Read the file from local storage using RNFS
-      // 2. Upload via HTTP to NAS endpoint
-      // 3. Handle authentication and SSL
-
-      const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
+      const protocol = config.useHttps ? 'https' : 'http';
+      const port = config.port || (config.useHttps ? 443 : 80);
+      const uploadUrl = `${protocol}://${config.host}:${port}${config.remotePath || '/photos'}/${photo.filename}`;
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
 
-      // Mock upload - would implement actual HTTP PUT/POST request here
-      // const fileContent = await RNFS.readFile(photo.uri, 'base64');
-      return true; // Assume success for demo
+      // 1. Read file as base64
+      const base64Content = await RNFS.readFile(photo.uri, 'base64');
+
+      // 2. Convert base64 to Uint8Array
+      const binaryString = this.decodeBase64(base64Content);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // 3. Prepare headers
+      const headers: { [key: string]: string } = {
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': bytes.length.toString()
+      };
+
+      if (config.username && config.password) {
+        const credentials = `${config.username}:${config.password}`;
+        const base64Auth = this.encodeBase64(credentials);
+        headers['Authorization'] = `Basic ${base64Auth}`;
+      }
+
+      // 4. Upload via PUT
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: headers,
+        body: bytes
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed with status: ${response.status}`);
+      }
+
+      return true;
     } catch (error) {
       console.error('NAS upload failed:', error);
       return false;
@@ -248,6 +277,57 @@ class NasSyncService {
   static async initializeSmbClient(_config: NasConfig): Promise<any> {
     // Future implementation for SMB sync
     return null;
+  }
+
+  /**
+   * Helper to encode string to base64
+   */
+  private static encodeBase64(input: string): string {
+    if (typeof global.btoa === 'function') {
+      return global.btoa(input);
+    }
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = input;
+    let output = '';
+
+    for (let block = 0, charCode, i = 0, map = chars;
+    str.charAt(i | 0) || (map = '=', i % 1);
+    output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+      charCode = str.charCodeAt(i += 3 / 4);
+      if (charCode > 0xFF) {
+        throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+      }
+      block = block << 8 | charCode;
+    }
+
+    return output;
+  }
+
+  /**
+   * Helper to decode base64 to string
+   */
+  private static decodeBase64(input: string): string {
+    if (typeof global.atob === 'function') {
+      return global.atob(input);
+    }
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = input.replace(/=+$/, '');
+    let output = '';
+
+    if (str.length % 4 == 1) {
+      throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
+    }
+    for (let bc = 0, bs = 0, buffer, i = 0;
+      buffer = str.charAt(i++);
+      ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+        bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+    ) {
+      buffer = chars.indexOf(buffer);
+    }
+
+    return output;
   }
 }
 
