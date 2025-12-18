@@ -92,18 +92,11 @@ class UserService {
         profile.nasConfig = nasConfig;
         await this.saveUserProfile(profile);
       } else {
-        // Create new profile with NAS config (for now)
-        const newProfile: UserProfile = {
-          id: 'guest',
-          email: 'guest@example.com',
-          displayName: 'Guest User',
-          nasConfig,
-        };
-        await this.saveUserProfile(newProfile);
+        throw new Error('User must be logged in to update NAS config');
       }
-    } catch {
-      console.error('Error updating NAS config');
-      throw new Error('Failed to update NAS configuration');
+    } catch (error) {
+      console.error('Error updating NAS config:', error);
+      throw error;
     }
   }
 
@@ -121,19 +114,55 @@ class UserService {
   }
 
   /**
-   * Create basic profile (foundation for user creation)
+   * Register a new user
    */
-  static async createBasicProfile(email: string, displayName: string): Promise<UserProfile> {
-    const profile: UserProfile = {
-      id: `user-${Date.now()}`,
-      email,
-      displayName,
-    };
+  static async registerUser(email: string, password: string, displayName: string): Promise<UserProfile> {
+    try {
+      const passwordHash = this.hashPassword(password);
+      const profile: UserProfile = {
+        id: `user-${Date.now()}`,
+        email,
+        displayName,
+        passwordHash,
+      };
 
-    await this.saveUserProfile(profile);
-    await this.saveAuthToken(`token-${profile.id}`); // Mock token for now
+      await this.saveUserProfile(profile);
+      await this.saveAuthToken(`token-${profile.id}`); // Mock token for now
 
-    return profile;
+      return profile;
+    } catch (error) {
+      console.error('Error registering user:', error);
+      throw new Error('Failed to register user');
+    }
+  }
+
+  /**
+   * Login user
+   */
+  static async loginUser(email: string, password: string): Promise<boolean> {
+    try {
+      const profile = await this.loadUserProfile();
+      if (profile && profile.email === email) {
+        const passwordHash = this.hashPassword(password);
+        if (profile.passwordHash === passwordHash) {
+          await this.saveAuthToken(`token-${profile.id}`);
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Error logging in:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Simple hash function for passwords (mock implementation)
+   */
+  private static hashPassword(password: string): string {
+    // In a real app, use a secure hashing library like bcrypt or argon2
+    // For this local-only prototype, we'll use a simple transformation
+    return password.split('').reverse().join('') + '-hashed';
   }
 }
 

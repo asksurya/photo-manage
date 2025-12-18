@@ -40,6 +40,7 @@ export interface UserProfile {
   id: string;
   email: string;
   displayName: string;
+  passwordHash?: string;
   nasConfig?: NasConfig;
 }
 
