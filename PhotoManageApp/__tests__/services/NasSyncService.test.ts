@@ -162,6 +162,66 @@ describe('NasSyncService', () => {
     });
   });
 
+  describe('uploadPhoto', () => {
+    it('should upload photo correctly', async () => {
+      const photo = {
+        id: '1',
+        uri: 'file:///path/to/photo.jpg',
+        filename: 'photo.jpg',
+        timestamp: Date.now(),
+        type: 'image/jpeg',
+        size: 1024,
+        width: 100,
+        height: 100
+      };
+
+      const mockFileContent = 'base64encodedcontent';
+      (RNFS.readFile as jest.Mock).mockResolvedValue(mockFileContent);
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 201,
+      });
+
+      const result = await NasSyncService.uploadPhoto(photo, mockConfig);
+
+      expect(result).toBe(true);
+      expect(RNFS.readFile).toHaveBeenCalledWith('/path/to/photo.jpg', 'base64');
+
+      const expectedUrl = 'http://192.168.1.100:8080/photos/photo.jpg';
+      expect(mockFetch).toHaveBeenCalledWith(expectedUrl, expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/octet-stream',
+          'Authorization': expect.stringContaining('Basic '),
+        }),
+      }));
+    });
+
+    it('should handle upload failure', async () => {
+      const photo = {
+        id: '1',
+        uri: 'file:///path/to/photo.jpg',
+        filename: 'photo.jpg',
+        timestamp: Date.now(),
+        type: 'image/jpeg',
+        size: 1024,
+        width: 100,
+        height: 100
+      };
+
+      (RNFS.readFile as jest.Mock).mockResolvedValue('content');
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+
+      const result = await NasSyncService.uploadPhoto(photo, mockConfig);
+
+      expect(result).toBe(false);
+    });
+  });
+
   describe('getLastSyncTime', () => {
     it('should return the last sync time when it exists', async () => {
       const mockTimestamp = 1629876543210;
