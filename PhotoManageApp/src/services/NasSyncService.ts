@@ -50,18 +50,53 @@ class NasSyncService {
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would:
-      // 1. Read the file from local storage using RNFS
-      // 2. Upload via HTTP to NAS endpoint
-      // 3. Handle authentication and SSL
+      // 1. Prepare upload details
+      const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}`;
 
-      const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
+      // 2. Handle authentication and SSL
+      const headers: { [key: string]: string } = {};
+      if (config.username && config.password) {
+        const credentials = `${config.username}:${config.password}`;
+
+        // Use global btoa if available
+        const btoa = global.btoa || ((input: string) => {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+          let str = input;
+          let output = '';
+
+          for (let block = 0, charCode, i = 0, map = chars;
+          str.charAt(i | 0) || (map = '=', i % 1);
+          output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+            charCode = str.charCodeAt(i += 3 / 4);
+            if (charCode > 0xFF) {
+              throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+            }
+            block = block << 8 | charCode;
+          }
+
+          return output;
+        });
+
+        const base64 = btoa(credentials);
+        headers['Authorization'] = `Basic ${base64}`;
+      }
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
 
-      // Mock upload - would implement actual HTTP PUT/POST request here
-      // const fileContent = await RNFS.readFile(photo.uri, 'base64');
-      return true; // Assume success for demo
+      // 3. Upload using RNFS.uploadFiles (avoids memory issues with large files)
+      const uploadResult = await RNFS.uploadFiles({
+        toUrl: uploadUrl,
+        files: [{
+          name: photo.filename,
+          filename: photo.filename,
+          filepath: photo.uri,
+          filetype: photo.type || 'image/jpeg',
+        }],
+        method: 'POST', // Standard for multipart upload
+        headers: headers,
+      }).promise;
+
+      return uploadResult.statusCode === 200 || uploadResult.statusCode === 201;
     } catch (error) {
       console.error('NAS upload failed:', error);
       return false;

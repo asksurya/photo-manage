@@ -1,5 +1,5 @@
 import NasSyncService from '../../src/services/NasSyncService';
-import { NasConfig } from '../../src/types/photo';
+import { NasConfig, Photo } from '../../src/types/photo';
 import RNFS from 'react-native-fs';
 import Exif from 'react-native-exif';
 import { jest } from '@jest/globals';
@@ -23,6 +23,13 @@ describe('NasSyncService', () => {
     useHttps: false,
     remotePath: '/photos',
   };
+
+  beforeAll(() => {
+    // Add uploadFiles mock if missing from global setup
+    if (!RNFS.uploadFiles) {
+      (RNFS as any).uploadFiles = jest.fn();
+    }
+  });
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -226,6 +233,66 @@ describe('NasSyncService', () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith('Error setting last sync time:', expect.any(Error));
 
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('uploadPhoto', () => {
+    const mockPhoto: Photo = {
+      id: 'test-photo-id',
+      uri: 'file:///path/to/photo.jpg',
+      filename: 'photo.jpg',
+      type: 'image/jpeg',
+      size: 1024,
+      width: 100,
+      height: 100,
+      timestamp: 1234567890,
+    };
+
+    it('should upload photo successfully', async () => {
+      // Mock RNFS.uploadFiles
+      (RNFS.uploadFiles as jest.Mock).mockReturnValue({
+        promise: Promise.resolve({ statusCode: 200, body: '{"success":true}' })
+      });
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(true);
+
+      const expectedAuth = 'Basic ' + global.btoa('user:password');
+      expect(RNFS.uploadFiles).toHaveBeenCalledWith(expect.objectContaining({
+        toUrl: 'http://192.168.1.100:8080/photos',
+        files: expect.arrayContaining([
+            expect.objectContaining({
+                name: mockPhoto.filename,
+                filepath: mockPhoto.uri,
+                filename: mockPhoto.filename
+            })
+        ]),
+        method: 'POST',
+        headers: expect.objectContaining({
+            Authorization: expectedAuth
+        })
+      }));
+    });
+
+    it('should handle upload failure', async () => {
+      (RNFS.uploadFiles as jest.Mock).mockReturnValue({
+        promise: Promise.resolve({ statusCode: 500, body: 'Error' })
+      });
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle file read error (or upload error)', async () => {
+      (RNFS.uploadFiles as jest.Mock).mockReturnValue({
+        promise: Promise.reject(new Error('Upload failed'))
+      });
+
+      const result = await NasSyncService.uploadPhoto(mockPhoto, mockConfig);
+
+      expect(result).toBe(false);
     });
   });
 });
