@@ -10,17 +10,34 @@ class NasSyncService {
    */
   static async testConnection(config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would make an HTTP request to the NAS
-      // For now, just check if config is valid
-      const { host, port = 80, username, password } = config;
+      const { host, port, username, password, useHttps, remotePath } = config;
 
       if (!host || !username || !password) {
         return false;
       }
 
-      // Mock connection test - would implement actual HTTP(S) request here
-      console.log(`Testing connection to ${host}:${port} as ${username}`);
-      return true; // Assume success for demo
+      const protocol = useHttps ? 'https' : 'http';
+      const actualPort = port || (useHttps ? 443 : 80);
+
+      let path = remotePath || '/';
+      if (!path.startsWith('/')) {
+        path = `/${path}`;
+      }
+
+      const url = `${protocol}://${host}:${actualPort}${path}`;
+
+      const credentials = btoa(`${username}:${password}`);
+
+      console.log(`Testing connection to ${url}`);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Basic ${credentials}`
+        }
+      });
+
+      return response.ok;
     } catch (error) {
       console.error('NAS connection test failed:', error);
       return false;
