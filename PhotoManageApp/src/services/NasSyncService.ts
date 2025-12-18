@@ -46,22 +46,96 @@ class NasSyncService {
   }
 
   /**
+   * Helper to encode base64
+   */
+  private static btoa(input: string): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = input;
+    let output = '';
+
+    for (let block = 0, charCode, i = 0, map = chars;
+    str.charAt(i | 0) || (map = '=', i % 1);
+    output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+      charCode = str.charCodeAt(i += 3 / 4);
+      if (charCode > 0xFF) {
+        throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+      }
+      block = block << 8 | charCode;
+    }
+    return output;
+  }
+
+  /**
    * Upload photo to NAS
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would:
       // 1. Read the file from local storage using RNFS
-      // 2. Upload via HTTP to NAS endpoint
-      // 3. Handle authentication and SSL
+      const path = photo.uri.startsWith('file://') ? photo.uri.substring(7) : photo.uri;
+      const fileContentBase64 = await RNFS.readFile(path, 'base64');
 
+      // Helper to convert base64 to Uint8Array
+      const base64ToUint8Array = (base64: string): Uint8Array => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+        let str = base64.replace(/=+$/, '');
+        let output = '';
+
+        if (str.length % 4 == 1) {
+          throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
+        }
+        for (let bc = 0, bs = 0, buffer, i = 0;
+          buffer = str.charAt(i++);
+        ) {
+          buffer = chars.indexOf(buffer);
+          if (~buffer) {
+            bs = bc % 4 ? bs * 64 + buffer : buffer;
+            if (bc++ % 4) output += String.fromCharCode(255 & bs >> (-2 * bc & 6));
+          }
+        }
+
+        const len = output.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = output.charCodeAt(i);
+        }
+        return bytes;
+      };
+
+      // Use global atob if available
+      const body = typeof global.atob === 'function'
+        ? Uint8Array.from(global.atob(fileContentBase64), c => c.charCodeAt(0))
+        : base64ToUint8Array(fileContentBase64);
+
+      // 2. Upload via HTTP to NAS endpoint
       const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
 
-      // Mock upload - would implement actual HTTP PUT/POST request here
-      // const fileContent = await RNFS.readFile(photo.uri, 'base64');
-      return true; // Assume success for demo
+      const headers: { [key: string]: string } = {
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': body.byteLength.toString(),
+      };
+
+      // 3. Handle authentication
+      if (config.username && config.password) {
+        const credentials = `${config.username}:${config.password}`;
+        const base64Auth = typeof global.btoa === 'function'
+          ? global.btoa(credentials)
+          : this.btoa(credentials);
+        headers['Authorization'] = `Basic ${base64Auth}`;
+      }
+
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: headers,
+        body: body,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed with status: ${response.status}`);
+      }
+
+      return true;
     } catch (error) {
       console.error('NAS upload failed:', error);
       return false;
