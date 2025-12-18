@@ -39,10 +39,19 @@ const GalleryScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (photos.length > 0) {
-      const allCategories = CategorizationService.getAllCategories(photos);
-      setCategories(allCategories);
-    }
+    let isMounted = true;
+    const fetchCategories = async () => {
+      if (photos.length > 0) {
+        const allCategories = await CategorizationService.getAllCategories(photos);
+        if (isMounted) {
+          setCategories(allCategories);
+        }
+      }
+    };
+    fetchCategories();
+    return () => {
+      isMounted = false;
+    };
   }, [photos]);
 
   const requestPermissions = async () => {
