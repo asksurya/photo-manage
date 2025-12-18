@@ -7,6 +7,52 @@ class NasSyncService {
   private static SYNC_STATUS_KEY = '@photo_manage_sync_status';
 
   /**
+   * Helper to encode string to base64
+   */
+  private static btoa(input: string): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = input;
+    let output = '';
+
+    for (let block = 0, charCode, i = 0, map = chars;
+    str.charAt(i | 0) || (map = '=', i % 1);
+    output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+      charCode = str.charCodeAt(i += 3 / 4);
+      if (charCode > 0xFF) {
+        throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+      }
+      block = block << 8 | charCode;
+    }
+    return output;
+  }
+
+  /**
+   * Helper to decode base64 string
+   */
+  private static atob(input: string): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = input.replace(/=+$/, '');
+    let output = '';
+
+    if (str.length % 4 == 1) {
+      throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
+    }
+    for (let bc = 0, bs = 0, buffer, i = 0;
+      buffer = str.charAt(i++);
+
+    ) {
+      buffer = chars.indexOf(buffer);
+      if (~buffer) {
+        bs = bc % 4 ? bs * 64 + buffer : buffer;
+        if (bc++ % 4) {
+          output += String.fromCharCode(255 & bs >> (-2 * bc & 6));
+        }
+      }
+    }
+    return output;
+  }
+
+  /**
    * Test NAS connection
    */
   static async testConnection(config: NasConfig): Promise<boolean> {
@@ -27,14 +73,15 @@ class NasSyncService {
 
       const url = `${protocol}://${host}:${actualPort}${path}`;
 
-      const credentials = btoa(`${username}:${password}`);
+      const credentials = `${username}:${password}`;
+      const base64Auth = typeof global.btoa === 'function' ? global.btoa(credentials) : this.btoa(credentials);
 
       console.log(`Testing connection to ${url}`);
 
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-            'Authorization': `Basic ${credentials}`
+            'Authorization': `Basic ${base64Auth}`
         }
       });
 
@@ -50,18 +97,49 @@ class NasSyncService {
    */
   static async uploadPhoto(photo: Photo, config: NasConfig): Promise<boolean> {
     try {
-      // In a real implementation, this would:
-      // 1. Read the file from local storage using RNFS
-      // 2. Upload via HTTP to NAS endpoint
-      // 3. Handle authentication and SSL
+      const { host, port, username, password, useHttps, remotePath } = config;
+      const protocol = useHttps ? 'https' : 'http';
+      const actualPort = port || (useHttps ? 443 : 80);
 
-      const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
+      let path = remotePath || '/photos';
+      // Ensure path starts with / and doesn't end with /
+      if (!path.startsWith('/')) path = '/' + path;
+      if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
+
+      const uploadUrl = `${protocol}://${host}:${actualPort}${path}/${photo.filename}`;
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
 
-      // Mock upload - would implement actual HTTP PUT/POST request here
-      // const fileContent = await RNFS.readFile(photo.uri, 'base64');
-      return true; // Assume success for demo
+      // Read file
+      const fileContentBase64 = await RNFS.readFile(photo.uri, 'base64');
+
+      // Convert base64 to binary
+      const atob = global.atob || this.atob;
+      const binaryString = atob(fileContentBase64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Prepare headers
+      const headers: { [key: string]: string } = {
+        'Content-Type': photo.type || 'application/octet-stream',
+      };
+
+      if (username && password) {
+        const credentials = `${username}:${password}`;
+        const btoa = global.btoa || this.btoa;
+        headers['Authorization'] = `Basic ${btoa(credentials)}`;
+      }
+
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: headers,
+        body: bytes as any // Cast to any because TS might complain about Uint8Array body in some envs
+      });
+
+      return response.ok;
     } catch (error) {
       console.error('NAS upload failed:', error);
       return false;
@@ -96,36 +174,8 @@ class NasSyncService {
       const headers: { [key: string]: string } = {};
       if (config.username && config.password) {
         const credentials = `${config.username}:${config.password}`;
-        // Note: Buffer is not available in RN by default, often used with 'buffer' package or btoa
-        // Using a simpler approach if Buffer is not available or assume 'buffer' polyfill
-        // But since this is TS and RN environment, let's use a simple base64 helper if possible or assume Buffer is available via polyfill
-        // If not, we can use a custom function.
-        // For this environment, let's assume we can use a basic base64 implementation.
-        // Actually, RN often provides 'btoa' or we can import 'buffer'.
-        // Since I don't want to add dependencies, I will check if btoa is available or implement simple one.
-        // However, 'react-native' exposes 'btoa' on global in newer versions.
-
-        // Let's implement a simple base64 encoder to be safe if Buffer is missing
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-        const btoa = (input: string) => {
-          let str = input;
-          let output = '';
-
-          for (let block = 0, charCode, i = 0, map = chars;
-          str.charAt(i | 0) || (map = '=', i % 1);
-          output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
-            charCode = str.charCodeAt(i += 3 / 4);
-            if (charCode > 0xFF) {
-              throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
-            }
-            block = block << 8 | charCode;
-          }
-
-          return output;
-        };
-
-        // Try to use global btoa if available
-        const base64 = typeof global.btoa === 'function' ? global.btoa(credentials) : btoa(credentials);
+        const btoa = global.btoa || this.btoa;
+        const base64 = btoa(credentials);
         headers['Authorization'] = `Basic ${base64}`;
       }
 
