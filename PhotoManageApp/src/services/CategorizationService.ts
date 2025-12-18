@@ -1,4 +1,5 @@
 import { Photo, PhotoPair, CategoryType } from '../types/photo';
+import MetadataService from './MetadataService';
 
 interface CategoryGroup {
   id: string;
@@ -47,7 +48,7 @@ class CategorizationService {
   /**
    * Categorize photos by location (if GPS data exists)
    */
-  static categorizeByLocation(photos: Photo[]): CategoryGroup[] {
+  static async categorizeByLocation(photos: Photo[]): Promise<CategoryGroup[]> {
     const groups = new Map<string, CategoryGroup>();
 
     // Only categorize photos that have GPS data
@@ -64,7 +65,7 @@ class CategorizationService {
       if (!groups.has(locationKey)) {
         groups.set(locationKey, {
           id: `location-${locationKey}`,
-          title: `Location: ${locationKey}`, // Would use actual place names in real implementation
+          title: `Location: ${locationKey}`, // Temporary title
           photos: [],
           pairs: [],
           type: CategoryType.LOCATION,
@@ -73,6 +74,21 @@ class CategorizationService {
 
       groups.get(locationKey)!.photos.push(photo);
     });
+
+    // Fetch actual place names for each group
+    await Promise.all(
+      Array.from(groups.entries()).map(async ([key, group]) => {
+        const [latStr, lngStr] = key.split(',');
+        const lat = parseFloat(latStr);
+        const lng = parseFloat(lngStr);
+        try {
+          const placeName = await MetadataService.getLocationName(lat, lng);
+          group.title = placeName;
+        } catch (error) {
+          console.warn(`Failed to get location name for ${key}:`, error);
+        }
+      })
+    );
 
     // Add photos without location to a separate group
     const photosWithoutLocation = photos.filter(photo =>
@@ -136,10 +152,11 @@ class CategorizationService {
   /**
    * Get all categorization options
    */
-  static getAllCategories(photos: Photo[]): { [key in CategoryType]: CategoryGroup[] } {
+  static async getAllCategories(photos: Photo[]): Promise<{ [key in CategoryType]: CategoryGroup[] }> {
+    const locationGroups = await this.categorizeByLocation(photos);
     return {
       [CategoryType.DATE]: this.categorizeByDate(photos),
-      [CategoryType.LOCATION]: this.categorizeByLocation(photos),
+      [CategoryType.LOCATION]: locationGroups,
       [CategoryType.CONTENT]: this.categorizeByContent(photos),
     };
   }
