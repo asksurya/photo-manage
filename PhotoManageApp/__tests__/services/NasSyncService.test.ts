@@ -14,6 +14,14 @@ if (!global.btoa) {
   global.btoa = (str: string) => Buffer.from(str).toString('base64');
 }
 
+// Mock AbortController
+if (!global.AbortController) {
+  global.AbortController = class {
+    signal = { aborted: false };
+    abort() { this.signal.aborted = true; }
+  } as any;
+}
+
 describe('NasSyncService', () => {
   const mockConfig: NasConfig = {
     host: '192.168.1.100',
@@ -121,6 +129,7 @@ describe('NasSyncService', () => {
           headers: expect.objectContaining({
             Authorization: 'Basic ' + global.btoa('user:password'),
           }),
+          signal: expect.anything()
         })
       );
     });
@@ -159,6 +168,22 @@ describe('NasSyncService', () => {
       const result = await NasSyncService.testConnection(mockConfig);
 
       expect(result).toBe(false);
+    });
+
+    it('should log error when connection times out', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+      mockFetch.mockRejectedValue(abortError);
+
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const result = await NasSyncService.testConnection(mockConfig);
+
+      expect(result).toBe(false);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('NAS connection test timed out');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('NAS connection test failed:', abortError);
+
+      consoleErrorSpy.mockRestore();
     });
   });
 
