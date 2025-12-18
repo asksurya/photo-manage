@@ -51,9 +51,45 @@ class MetadataService {
    * Extract location display name from coordinates
    */
   static async getLocationName(latitude: number, longitude: number): Promise<string> {
-    // In a real implementation, this would use a geocoding service
-    // For now, return formatted coordinates
-    return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'PhotoManageApp/1.0',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const data = await response.json();
+
+      // Try to get the most relevant name
+      const address = data.address;
+      if (address) {
+        // Return city, town, village, or suburb + country
+        const main = address.city || address.town || address.village || address.suburb || address.county;
+        const country = address.country;
+
+        if (main && country) {
+          return `${main}, ${country}`;
+        } else if (main) {
+          return main;
+        } else if (data.display_name) {
+          // Fallback to first part of display name
+          return data.display_name.split(',')[0];
+        }
+      }
+
+      return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    } catch (error) {
+      console.warn('Geocoding error:', error);
+      // Fallback to formatted coordinates
+      return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    }
   }
 
   /**
