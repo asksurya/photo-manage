@@ -7,35 +7,84 @@ class NasSyncService {
   private static SYNC_STATUS_KEY = '@photo_manage_sync_status';
 
   /**
+   * Helper to construct URL with correct protocol and port
+   */
+  private static buildUrl(config: NasConfig, path: string): string {
+    const protocol = config.useHttps ? 'https' : 'http';
+    const port = config.port || (config.useHttps ? 443 : 80);
+    const basePath = config.remotePath || '';
+
+    // Clean paths
+    const cleanBasePath = basePath.replace(/\/$/, '');
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+
+    // Combine paths
+    const parts = [cleanBasePath, cleanPath].filter(p => p);
+    const fullPath = parts.join('/');
+
+    // Ensure leading slash for the final path if it's not empty, but URL needs it after host:port
+    const urlPath = fullPath.startsWith('/') ? fullPath : `/${fullPath}`;
+
+    return `${protocol}://${config.host}:${port}${urlPath}`;
+  }
+
+  /**
+   * Helper to generate Basic Auth header
+   */
+  private static getBasicAuthHeader(config: NasConfig): string | null {
+    if (!config.username || !config.password) {
+      return null;
+    }
+
+    const credentials = `${config.username}:${config.password}`;
+
+    // Use global btoa if available, otherwise use a simple implementation
+    let base64: string;
+    if (typeof global.btoa === 'function') {
+      base64 = global.btoa(credentials);
+    } else {
+      // Simple fallback for environment without btoa
+      /* eslint-disable no-bitwise */
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+      let output = '';
+      let str = credentials;
+      for (let block = 0, charCode, i = 0, map = chars;
+      str.charAt(i | 0) || (map = '=', i % 1);
+      output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+        charCode = str.charCodeAt(i += 3 / 4);
+        block = block << 8 | charCode;
+      }
+      base64 = output;
+      /* eslint-enable no-bitwise */
+    }
+
+    return `Basic ${base64}`;
+  }
+
+  /**
    * Test NAS connection
    */
   static async testConnection(config: NasConfig): Promise<boolean> {
     try {
-      const { host, port, username, password, useHttps, remotePath } = config;
+      const { host, username, password } = config;
 
       if (!host || !username || !password) {
         return false;
       }
 
-      const protocol = useHttps ? 'https' : 'http';
-      const actualPort = port || (useHttps ? 443 : 80);
-
-      let path = remotePath || '/';
-      if (!path.startsWith('/')) {
-        path = `/${path}`;
-      }
-
-      const url = `${protocol}://${host}:${actualPort}${path}`;
-
-      const credentials = btoa(`${username}:${password}`);
+      const url = this.buildUrl(config, '');
 
       console.log(`Testing connection to ${url}`);
 
+      const headers: { [key: string]: string } = {};
+      const authHeader = this.getBasicAuthHeader(config);
+      if (authHeader) {
+          headers.Authorization = authHeader;
+      }
+
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-            'Authorization': `Basic ${credentials}`
-        }
+        headers: headers
       });
 
       return response.ok;
@@ -55,7 +104,7 @@ class NasSyncService {
       // 2. Upload via HTTP to NAS endpoint
       // 3. Handle authentication and SSL
 
-      const uploadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${config.remotePath || '/photos'}/${photo.filename}`;
+      const uploadUrl = this.buildUrl(config, photo.filename);
 
       console.log(`Uploading ${photo.filename} to ${uploadUrl}`);
 
@@ -76,11 +125,7 @@ class NasSyncService {
       console.log(`Downloading from ${remotePath}`);
 
       // 1. Construct URL
-      const basePath = config.remotePath || '';
-      // Ensure no double slashes
-      const pathPart = `${basePath.replace(/\/$/, '')}/${remotePath.replace(/^\//, '')}`;
-
-      const downloadUrl = `${config.useHttps ? 'https' : 'http'}://${config.host}:${config.port || 80}${pathPart}`;
+      const downloadUrl = this.buildUrl(config, remotePath);
 
       // 2. Define local path
       const filename = remotePath.split('/').pop() || 'downloaded_photo.jpg';
@@ -94,39 +139,9 @@ class NasSyncService {
 
       // Prepare headers
       const headers: { [key: string]: string } = {};
-      if (config.username && config.password) {
-        const credentials = `${config.username}:${config.password}`;
-        // Note: Buffer is not available in RN by default, often used with 'buffer' package or btoa
-        // Using a simpler approach if Buffer is not available or assume 'buffer' polyfill
-        // But since this is TS and RN environment, let's use a simple base64 helper if possible or assume Buffer is available via polyfill
-        // If not, we can use a custom function.
-        // For this environment, let's assume we can use a basic base64 implementation.
-        // Actually, RN often provides 'btoa' or we can import 'buffer'.
-        // Since I don't want to add dependencies, I will check if btoa is available or implement simple one.
-        // However, 'react-native' exposes 'btoa' on global in newer versions.
-
-        // Let's implement a simple base64 encoder to be safe if Buffer is missing
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-        const btoa = (input: string) => {
-          let str = input;
-          let output = '';
-
-          for (let block = 0, charCode, i = 0, map = chars;
-          str.charAt(i | 0) || (map = '=', i % 1);
-          output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
-            charCode = str.charCodeAt(i += 3 / 4);
-            if (charCode > 0xFF) {
-              throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
-            }
-            block = block << 8 | charCode;
-          }
-
-          return output;
-        };
-
-        // Try to use global btoa if available
-        const base64 = typeof global.btoa === 'function' ? global.btoa(credentials) : btoa(credentials);
-        headers['Authorization'] = `Basic ${base64}`;
+      const authHeader = this.getBasicAuthHeader(config);
+      if (authHeader) {
+        headers.Authorization = authHeader;
       }
 
       // 3. Download file
