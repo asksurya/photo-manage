@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Photo, PhotoPair } from '../types/photo';
-// import RNFS from 'react-native-fs'; // Ready for file operations
+import { Photo, PhotoPair, Album } from '../types/photo';
+import RNFS from 'react-native-fs'; // Ready for file operations
 import Exif from 'react-native-exif';
 
 class PhotoService {
   private static PHOTO_STORAGE_KEY = '@photo_manage_photos';
+  private static ALBUM_STORAGE_KEY = '@photo_manage_albums';
 
   /**
    * Load saved photos from local storage
@@ -13,11 +14,7 @@ class PhotoService {
     try {
       const storedPhotos = await AsyncStorage.getItem(this.PHOTO_STORAGE_KEY);
       if (storedPhotos) {
-        const photos: Photo[] = JSON.parse(storedPhotos);
-        return photos.map(photo => ({
-          ...photo,
-          timestamp: new Date(photo.timestamp).getTime(),
-        }));
+        return JSON.parse(storedPhotos);
       }
     } catch (error) {
       console.error('Error loading photos:', error);
@@ -85,7 +82,7 @@ class PhotoService {
       height: height,
       timestamp: exifData?.DateTimeOriginal
         ? new Date(exifData.DateTimeOriginal).getTime()
-        : new Date().getTime(),
+        : Date.now(),
       exif: exifData,
     };
 
@@ -135,9 +132,7 @@ class PhotoService {
     const baseName = photo.filename.replace(/\.(jpg|jpeg|raw|cr2|nef|arw)$/i, '');
 
     // Extract timestamp if available
-    const timestamp = photo.exif?.DateTimeOriginal
-      ? new Date(photo.exif.DateTimeOriginal).getTime()
-      : photo.timestamp;
+    const timestamp = photo.timestamp;
 
     // Create pairing key based on filename and timestamp
     return `${baseName}_${timestamp}`;
@@ -168,6 +163,129 @@ class PhotoService {
    */
   static sortPhotosByDate(photos: Photo[]): Photo[] {
     return photos.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  /**
+   * Album Management
+   */
+
+  static async getAlbums(): Promise<Album[]> {
+    try {
+      const storedAlbums = await AsyncStorage.getItem(this.ALBUM_STORAGE_KEY);
+      return storedAlbums ? JSON.parse(storedAlbums) : [];
+    } catch (error) {
+      console.error('Error loading albums:', error);
+      return [];
+    }
+  }
+
+  static async saveAlbums(albums: Album[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(this.ALBUM_STORAGE_KEY, JSON.stringify(albums));
+    } catch (error) {
+      console.error('Error saving albums:', error);
+      throw new Error('Failed to save albums');
+    }
+  }
+
+  static async createAlbum(name: string): Promise<Album> {
+    const albums = await this.getAlbums();
+    const newAlbum: Album = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name,
+      photoIds: [],
+    };
+    const updatedAlbums = [...albums, newAlbum];
+    await this.saveAlbums(updatedAlbums);
+    return newAlbum;
+  }
+
+  static async addPhotoToAlbum(photoId: string, albumId: string): Promise<void> {
+    const albums = await this.getAlbums();
+    const album = albums.find((a) => a.id === albumId);
+    if (album && !album.photoIds.includes(photoId)) {
+      album.photoIds.push(photoId);
+      await this.saveAlbums(albums);
+    }
+  }
+
+  static async getPhotosForAlbum(albumId: string): Promise<Photo[]> {
+    const albums = await this.getAlbums();
+    const album = albums.find((a) => a.id === albumId);
+    if (!album) {
+      return [];
+    }
+    const allPhotos = await this.loadPhotos();
+    return allPhotos.filter((p) => album.photoIds.includes(p.id));
+  }
+
+  static async deleteAlbum(albumId: string): Promise<void> {
+    const albums = await this.getAlbums();
+    const updatedAlbums = albums.filter((a) => a.id !== albumId);
+    await this.saveAlbums(updatedAlbums);
+  }
+
+  static async removePhotoFromAlbum(photoId: string, albumId: string): Promise<void> {
+    const albums = await this.getAlbums();
+    const album = albums.find((a) => a.id === albumId);
+    if (album) {
+      album.photoIds = album.photoIds.filter((id) => id !== photoId);
+      await this.saveAlbums(albums);
+    }
+  }
+
+  /**
+   * File Operations
+   */
+
+  /**
+   * Check if a file exists
+   */
+  static async fileExists(path: string): Promise<boolean> {
+    try {
+      return await RNFS.exists(path);
+    } catch (error) {
+      console.error('Error checking file existence:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Delete a file
+   */
+  static async deleteFile(path: string): Promise<void> {
+    try {
+      if (await this.fileExists(path)) {
+        await RNFS.unlink(path);
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      throw new Error(`Failed to delete file: ${path}`);
+    }
+  }
+
+  /**
+   * Move a file
+   */
+  static async moveFile(sourcePath: string, destPath: string): Promise<void> {
+    try {
+      await RNFS.moveFile(sourcePath, destPath);
+    } catch (error) {
+      console.error('Error moving file:', error);
+      throw new Error(`Failed to move file from ${sourcePath} to ${destPath}`);
+    }
+  }
+
+  /**
+   * Copy a file
+   */
+  static async copyFile(sourcePath: string, destPath: string): Promise<void> {
+    try {
+      await RNFS.copyFile(sourcePath, destPath);
+    } catch (error) {
+      console.error('Error copying file:', error);
+      throw new Error(`Failed to copy file from ${sourcePath} to ${destPath}`);
+    }
   }
 }
 

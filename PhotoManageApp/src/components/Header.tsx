@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 interface HeaderProps {
   photoCount: number;
@@ -7,22 +8,34 @@ interface HeaderProps {
   isLoading: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ photoCount, onImport, isLoading }) => (
-  <View style={styles.header}>
-    <View>
-      <Text style={styles.title}>Photo Manage</Text>
-      <Text style={styles.subtitle}>{photoCount} photo{photoCount !== 1 ? 's' : ''}</Text>
+const Header: React.FC<HeaderProps> = ({ photoCount, onImport, isLoading }) => {
+  const navigation = useNavigation();
+
+  return (
+    <View style={styles.header}>
+      <View>
+        <Text style={styles.title}>Photo Manage</Text>
+        <Text style={styles.subtitle}>{photoCount} photo{photoCount !== 1 ? 's' : ''}</Text>
+      </View>
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity
+          style={styles.importButton}
+          onPress={() => navigation.navigate('Albums')}
+        >
+          <Text style={styles.importButtonText}>View Albums</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.importButton}
+          onPress={onImport}
+          disabled={isLoading}
+        >
+          <Text style={styles.importIcon}>📁</Text>
+          <Text style={styles.importButtonText}>Import</Text>
+        </TouchableOpacity>
+      </View>
     </View>
-    <TouchableOpacity
-      style={styles.importButton}
-      onPress={onImport}
-      disabled={isLoading}
-    >
-      <Text style={styles.importIcon}>📁</Text>
-      <Text style={styles.importButtonText}>Import</Text>
-    </TouchableOpacity>
-  </View>
-);
+  );
+};
 
 const styles = StyleSheet.create({
   header: {
@@ -51,6 +64,9 @@ const styles = StyleSheet.create({
     color: '#6C757D',
     marginTop: 2,
   },
+  buttonContainer: {
+    flexDirection: 'row',
+  },
   importButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -63,6 +79,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+    marginLeft: 10,
   },
   importIcon: {
     fontSize: 18,

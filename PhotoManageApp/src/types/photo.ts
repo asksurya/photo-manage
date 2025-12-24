@@ -6,7 +6,7 @@ export interface Photo {
   size: number;
   width?: number;
   height?: number;
-  timestamp: Date;
+  timestamp: number;
   exif?: {
     DateTimeOriginal?: string;
     GPSLatitude?: number;
@@ -56,4 +56,10 @@ export enum CategoryType {
   DATE = 'date',
   LOCATION = 'location',
   CONTENT = 'content',
+}
+
+export interface Album {
+  id: string;
+  name: string;
+  photoIds: string[];
 }

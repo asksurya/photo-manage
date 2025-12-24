@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Modal,
+  Button,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PhotoPair } from '../types/photo';
+import { PhotoPair, Album } from '../types/photo';
+import PhotoService from '../services/PhotoService';
 
 interface SplitViewProps {
   pair: PhotoPair;
@@ -16,6 +20,30 @@ interface SplitViewProps {
 }
 
 const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [albums, setAlbums] = useState<Album[]>([]);
+
+  useEffect(() => {
+    if (modalVisible) {
+      loadAlbums();
+    }
+  }, [modalVisible]);
+
+  const loadAlbums = async () => {
+    const loadedAlbums = await PhotoService.getAlbums();
+    setAlbums(loadedAlbums);
+  };
+
+  const handleAddToAlbum = async (albumId: string) => {
+    if (pair.raw) {
+      await PhotoService.addPhotoToAlbum(pair.raw.id, albumId);
+    }
+    if (pair.jpeg) {
+      await PhotoService.addPhotoToAlbum(pair.jpeg.id, albumId);
+    }
+    setModalVisible(false);
+  };
+
   const rawPhoto = pair.raw;
   const jpegPhoto = pair.jpeg;
 
@@ -156,12 +184,14 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
             {pair.pairingKey}
           </Text>
         </View>
-        <View style={styles.headerRight} />
+        <TouchableOpacity style={styles.addToAlbumButton} onPress={() => setModalVisible(true)}>
+          <Text style={styles.addToAlbumButtonText}>Add to Album</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Content */}
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -196,6 +226,30 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
         {/* Bottom spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Add to Album</Text>
+            <FlatList
+              data={albums}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.albumSelectItem} onPress={() => handleAddToAlbum(item.id)}>
+                  <Text style={styles.albumSelectItemText}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              keyExtractor={(item) => item.id}
+              style={styles.albumList}
+            />
+            <Button title="Cancel" onPress={() => setModalVisible(false)} color="#6c757d" />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -247,6 +301,17 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 80,
+  },
+  addToAlbumButton: {
+    backgroundColor: '#007bff',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  addToAlbumButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   content: {
     flex: 1,
@@ -410,6 +475,44 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 20,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalView: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  albumList: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  albumSelectItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dee2e6',
+  },
+  albumSelectItemText: {
+    fontSize: 18,
   },
 });
 
