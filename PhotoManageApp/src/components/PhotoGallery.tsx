@@ -348,7 +348,7 @@ const PhotoGallery: React.FC = () => {
             />
             <Button title="Cancel" onPress={() => setAlbumSelectionModalVisible(false)} />
           </View>
-        </view>
+        </View>
       </Modal>
 
       <Modal

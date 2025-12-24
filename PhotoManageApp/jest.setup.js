@@ -44,7 +44,6 @@ jest.mock('react-native-gesture-handler', () => {
     PinchGestureHandler: View,
     PanGestureHandler: View,
     RotationGestureHandler: View,
-    /* etc. */
   };
 });
 
@@ -99,3 +98,62 @@ jest.mock('react-native-fs', () => ({
   LibraryDirectoryPath: '/mock/LibraryDirectoryPath',
   PicturesDirectoryPath: '/mock/PicturesDirectoryPath',
 }));
+
+// Mock React Navigation
+jest.mock('@react-navigation/native', () => {
+  const actualNav = jest.requireActual('@react-navigation/native');
+  return {
+    ...actualNav,
+    NavigationContainer: ({ children }) => children,
+    useNavigation: () => ({
+      navigate: jest.fn(),
+      goBack: jest.fn(),
+    }),
+    useRoute: () => ({
+      params: {},
+    }),
+    useFocusEffect: jest.fn(),
+  };
+});
+
+jest.mock('@react-navigation/native-stack', () => ({
+  createNativeStackNavigator: () => ({
+    Navigator: ({ children }) => children,
+    Screen: ({ children }) => children,
+  }),
+}));
+
+jest.mock('@react-navigation/bottom-tabs', () => ({
+  createBottomTabNavigator: () => ({
+    Navigator: ({ children }) => children,
+    Screen: ({ children }) => children,
+  }),
+}));
+
+jest.mock('@react-navigation/stack', () => ({
+  createStackNavigator: () => ({
+    Navigator: ({ children }) => children,
+    Screen: ({ children }) => children,
+  }),
+}));
+
+jest.mock('react-native-keychain', () => ({
+  setGenericPassword: jest.fn(() => Promise.resolve(true)),
+  getGenericPassword: jest.fn(() => Promise.resolve(false)),
+  resetGenericPassword: jest.fn(() => Promise.resolve(true)),
+}));
+
+jest.mock(
+  'react-native-blob-util',
+  () => ({
+    fetch: jest.fn(() => Promise.resolve({ status: 200, data: '' })),
+    fs: {
+      readFile: jest.fn(() => Promise.resolve('base64data')),
+      writeFile: jest.fn(() => Promise.resolve()),
+      dirs: {
+        CacheDir: '/mock/cache',
+      },
+    },
+  }),
+  { virtual: true }
+);
