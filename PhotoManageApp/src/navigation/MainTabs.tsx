@@ -1,6 +1,8 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import GalleryScreen from '../screens/GalleryScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { View, Text, StyleSheet } from 'react-native';
 
 type MainTabsParamList = {
@@ -8,14 +10,42 @@ type MainTabsParamList = {
   Settings: undefined;
 };
 
-const Tab = createBottomTabNavigator<MainTabsParamList>();
+type SettingsStackParamList = {
+  SettingsHome: undefined;
+  NasConfig: undefined;
+};
 
-// Placeholder - will be replaced in Task 6
-const SettingsPlaceholder = () => (
-  <View style={styles.container}>
-    <Text>Settings Screen Placeholder</Text>
+const Tab = createBottomTabNavigator<MainTabsParamList>();
+const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
+
+// Placeholder for NasConfig screen - will be implemented in Task 7
+const NasConfigPlaceholder = () => (
+  <View style={styles.placeholder}>
+    <Text>NAS Configuration Screen Placeholder</Text>
   </View>
 );
+
+interface SettingsStackNavigatorProps {
+  onLogout: () => void;
+}
+
+const SettingsStackNavigator: React.FC<SettingsStackNavigatorProps> = ({ onLogout }) => {
+  return (
+    <SettingsStack.Navigator>
+      <SettingsStack.Screen
+        name="SettingsHome"
+        options={{ headerShown: false }}
+      >
+        {(props) => <SettingsScreen {...props} onLogout={onLogout} />}
+      </SettingsStack.Screen>
+      <SettingsStack.Screen
+        name="NasConfig"
+        component={NasConfigPlaceholder}
+        options={{ title: 'NAS Configuration' }}
+      />
+    </SettingsStack.Navigator>
+  );
+};
 
 interface MainTabsProps {
   onLogout: () => void;
@@ -39,18 +69,24 @@ const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
       />
       <Tab.Screen
         name="Settings"
-        component={SettingsPlaceholder}
         options={{
           tabBarLabel: 'Settings',
         }}
-      />
+      >
+        {() => <SettingsStackNavigator onLogout={onLogout} />}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  placeholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
 });
 
 export default MainTabs;
-export type { MainTabsParamList };
+export type { MainTabsParamList, SettingsStackParamList };
