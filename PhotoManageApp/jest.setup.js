@@ -57,3 +57,18 @@ jest.mock('react-native-keychain', () => ({
   getGenericPassword: jest.fn(() => Promise.resolve(false)),
   resetGenericPassword: jest.fn(() => Promise.resolve(true)),
 }));
+
+jest.mock(
+  'react-native-blob-util',
+  () => ({
+    fetch: jest.fn(() => Promise.resolve({ status: 200, data: '' })),
+    fs: {
+      readFile: jest.fn(() => Promise.resolve('base64data')),
+      writeFile: jest.fn(() => Promise.resolve()),
+      dirs: {
+        CacheDir: '/mock/cache',
+      },
+    },
+  }),
+  { virtual: true }
+);
