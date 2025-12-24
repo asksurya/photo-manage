@@ -31,7 +31,7 @@ describe('UserService', () => {
     it('should authenticate with valid credentials', async () => {
       // First register to set up proper credentials and profile
       (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
-      const registeredProfile = await UserService.register('test@example.com', 'password123', 'Test User');
+      await UserService.register('test@example.com', 'password123', 'Test User');
 
       // Get the hash that was stored during registration
       const storedHash = (Keychain.setGenericPassword as jest.Mock).mock.calls[0][1];
