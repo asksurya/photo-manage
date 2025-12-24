@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import GalleryScreen from '../screens/GalleryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import { View, Text, StyleSheet } from 'react-native';
+import NasConfigScreen from '../screens/NasConfigScreen';
 
 type MainTabsParamList = {
   Gallery: undefined;
@@ -18,12 +18,6 @@ type SettingsStackParamList = {
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
-// Placeholder for NasConfig screen - will be implemented in Task 7
-const NasConfigPlaceholder = () => (
-  <View style={styles.placeholder}>
-    <Text>NAS Configuration Screen Placeholder</Text>
-  </View>
-);
 
 interface SettingsStackNavigatorProps {
   onLogout: () => void;
@@ -40,7 +34,7 @@ const SettingsStackNavigator: React.FC<SettingsStackNavigatorProps> = ({ onLogou
       </SettingsStack.Screen>
       <SettingsStack.Screen
         name="NasConfig"
-        component={NasConfigPlaceholder}
+        component={NasConfigScreen}
         options={{ title: 'NAS Configuration' }}
       />
     </SettingsStack.Navigator>
@@ -78,15 +72,6 @@ const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
     </Tab.Navigator>
   );
 };
-
-const styles = StyleSheet.create({
-  placeholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-  },
-});
 
 export default MainTabs;
 export type { MainTabsParamList, SettingsStackParamList };
