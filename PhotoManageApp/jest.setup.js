@@ -51,3 +51,9 @@ jest.mock('@react-navigation/bottom-tabs', () => ({
     Screen: ({ children }) => children,
   }),
 }));
+
+jest.mock('react-native-keychain', () => ({
+  setGenericPassword: jest.fn(() => Promise.resolve(true)),
+  getGenericPassword: jest.fn(() => Promise.resolve(false)),
+  resetGenericPassword: jest.fn(() => Promise.resolve(true)),
+}));
