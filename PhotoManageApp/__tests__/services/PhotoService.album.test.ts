@@ -86,6 +86,38 @@ describe('PhotoService Album Management', () => {
     );
   });
 
+  it('should rename an album', async () => {
+    const albums: Album[] = [
+      { id: '1', name: 'Old Name', photoIds: [] },
+      { id: '2', name: 'Another Album', photoIds: [] },
+    ];
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(JSON.stringify(albums));
+    await PhotoService.renameAlbum('1', 'New Name');
+    const expectedAlbums = [
+      { id: '1', name: 'New Name', photoIds: [] },
+      { id: '2', name: 'Another Album', photoIds: [] },
+    ];
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@photo_manage_albums',
+      JSON.stringify(expectedAlbums)
+    );
+  });
+
+  it('should preserve photoIds when renaming an album', async () => {
+    const albums: Album[] = [
+      { id: '1', name: 'Old Name', photoIds: ['p1', 'p2', 'p3'] },
+    ];
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(JSON.stringify(albums));
+    await PhotoService.renameAlbum('1', 'New Name');
+    const expectedAlbums = [
+      { id: '1', name: 'New Name', photoIds: ['p1', 'p2', 'p3'] },
+    ];
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@photo_manage_albums',
+      JSON.stringify(expectedAlbums)
+    );
+  });
+
   it('should remove a photo from an album', async () => {
     const albums: Album[] = [{ id: '1', name: 'Test Album', photoIds: ['p1'] }];
     (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(JSON.stringify(albums));
