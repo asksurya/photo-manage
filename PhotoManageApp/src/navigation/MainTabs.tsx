@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import GalleryScreen from '../screens/GalleryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import NasConfigScreen from '../screens/NasConfigScreen';
+import TrashScreen from '../screens/TrashScreen';
 
 type MainTabsParamList = {
   Gallery: undefined;
@@ -13,6 +14,7 @@ type MainTabsParamList = {
 type SettingsStackParamList = {
   SettingsHome: undefined;
   NasConfig: undefined;
+  Trash: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabsParamList>();
@@ -36,6 +38,11 @@ const SettingsStackNavigator: React.FC<SettingsStackNavigatorProps> = ({ onLogou
         name="NasConfig"
         component={NasConfigScreen}
         options={{ title: 'NAS Configuration' }}
+      />
+      <SettingsStack.Screen
+        name="Trash"
+        component={TrashScreen}
+        options={{ headerShown: false }}
       />
     </SettingsStack.Navigator>
   );

@@ -7,6 +7,7 @@ export interface Photo {
   width?: number;
   height?: number;
   timestamp: number;
+  deletedAt?: number;
   exif?: {
     DateTimeOriginal?: string;
     GPSLatitude?: number;

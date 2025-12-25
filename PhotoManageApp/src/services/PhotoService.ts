@@ -6,15 +6,21 @@ import Exif from 'react-native-exif';
 class PhotoService {
   private static PHOTO_STORAGE_KEY = '@photo_manage_photos';
   private static ALBUM_STORAGE_KEY = '@photo_manage_albums';
+  static TRASH_RETENTION_DAYS = 30;
 
   /**
-   * Load saved photos from local storage
+   * Load saved photos from local storage (excludes trashed photos by default)
    */
-  static async loadPhotos(): Promise<Photo[]> {
+  static async loadPhotos(includeTrash: boolean = false): Promise<Photo[]> {
     try {
       const storedPhotos = await AsyncStorage.getItem(this.PHOTO_STORAGE_KEY);
       if (storedPhotos) {
-        return JSON.parse(storedPhotos);
+        const photos: Photo[] = JSON.parse(storedPhotos);
+        if (includeTrash) {
+          return photos;
+        }
+        // Exclude trashed photos by default
+        return photos.filter(p => !p.deletedAt);
       }
     } catch (error) {
       console.error('Error loading photos:', error);
@@ -244,25 +250,138 @@ class PhotoService {
   }
 
   /**
-   * Delete photos by their IDs
+   * Delete photos by their IDs (soft delete - moves to trash)
    */
   static async deletePhotos(photoIds: string[]): Promise<void> {
+    // Use moveToTrash for soft delete
+    await this.moveToTrash(photoIds);
+  }
+
+  /**
+   * Move photos to trash by setting deletedAt timestamp
+   */
+  static async moveToTrash(photoIds: string[]): Promise<void> {
     try {
-      const photos = await this.loadPhotos();
-      const idsToDelete = new Set(photoIds);
-      const remaining = photos.filter(p => !idsToDelete.has(p.id));
-      await this.savePhotos(remaining);
+      const photos = await this.loadPhotos(true); // Include already trashed
+      const idsToTrash = new Set(photoIds);
+      const now = Date.now();
+
+      const updatedPhotos = photos.map(p => {
+        if (idsToTrash.has(p.id) && !p.deletedAt) {
+          return { ...p, deletedAt: now };
+        }
+        return p;
+      });
+
+      await this.savePhotos(updatedPhotos);
 
       // Also remove from any albums
       const albums = await this.getAlbums();
       const updatedAlbums = albums.map(album => ({
         ...album,
-        photoIds: album.photoIds.filter((id: string) => !idsToDelete.has(id)),
+        photoIds: album.photoIds.filter((id: string) => !idsToTrash.has(id)),
       }));
       await this.saveAlbums(updatedAlbums);
     } catch (error) {
-      console.error('Error deleting photos:', error);
-      throw new Error('Failed to delete photos');
+      console.error('Error moving photos to trash:', error);
+      throw new Error('Failed to move photos to trash');
+    }
+  }
+
+  /**
+   * Restore photos from trash by clearing deletedAt
+   */
+  static async restoreFromTrash(photoIds: string[]): Promise<void> {
+    try {
+      const photos = await this.loadPhotos(true); // Include trashed
+      const idsToRestore = new Set(photoIds);
+
+      const updatedPhotos = photos.map(p => {
+        if (idsToRestore.has(p.id) && p.deletedAt) {
+          const { deletedAt, ...photoWithoutDeletedAt } = p;
+          return photoWithoutDeletedAt;
+        }
+        return p;
+      });
+
+      await this.savePhotos(updatedPhotos);
+    } catch (error) {
+      console.error('Error restoring photos from trash:', error);
+      throw new Error('Failed to restore photos from trash');
+    }
+  }
+
+  /**
+   * Permanently delete all photos in trash
+   */
+  static async emptyTrash(): Promise<void> {
+    try {
+      const photos = await this.loadPhotos(true); // Include trashed
+      const remaining = photos.filter(p => !p.deletedAt);
+      await this.savePhotos(remaining);
+    } catch (error) {
+      console.error('Error emptying trash:', error);
+      throw new Error('Failed to empty trash');
+    }
+  }
+
+  /**
+   * Get all trashed photos
+   */
+  static async getTrashPhotos(): Promise<Photo[]> {
+    try {
+      const photos = await this.loadPhotos(true); // Include trashed
+      return photos.filter(p => p.deletedAt);
+    } catch (error) {
+      console.error('Error getting trash photos:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Permanently delete photos older than TRASH_RETENTION_DAYS
+   */
+  static async cleanupExpiredTrash(): Promise<number> {
+    try {
+      const photos = await this.loadPhotos(true); // Include trashed
+      const now = Date.now();
+      const retentionMs = this.TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+      const { remaining, deleted } = photos.reduce(
+        (acc, photo) => {
+          if (photo.deletedAt && (now - photo.deletedAt) > retentionMs) {
+            acc.deleted.push(photo);
+          } else {
+            acc.remaining.push(photo);
+          }
+          return acc;
+        },
+        { remaining: [] as Photo[], deleted: [] as Photo[] }
+      );
+
+      if (deleted.length > 0) {
+        await this.savePhotos(remaining);
+      }
+
+      return deleted.length;
+    } catch (error) {
+      console.error('Error cleaning up expired trash:', error);
+      throw new Error('Failed to cleanup expired trash');
+    }
+  }
+
+  /**
+   * Permanently delete specific photos (bypass trash)
+   */
+  static async permanentlyDeletePhotos(photoIds: string[]): Promise<void> {
+    try {
+      const photos = await this.loadPhotos(true); // Include trashed
+      const idsToDelete = new Set(photoIds);
+      const remaining = photos.filter(p => !idsToDelete.has(p.id));
+      await this.savePhotos(remaining);
+    } catch (error) {
+      console.error('Error permanently deleting photos:', error);
+      throw new Error('Failed to permanently delete photos');
     }
   }
 

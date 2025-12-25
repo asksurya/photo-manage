@@ -83,6 +83,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout, navigation })
     navigation.navigate('NasConfig');
   };
 
+  const handleOpenTrash = () => {
+    navigation.navigate('Trash');
+  };
+
   const handleSyncNow = async () => {
     if (!profile?.nasConfig) {
       Alert.alert('Not Configured', 'Please configure NAS settings first.');
@@ -214,6 +218,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout, navigation })
             <Text style={styles.label}>Local Photos</Text>
             <Text style={styles.value}>{photos.length} photo{photos.length !== 1 ? 's' : ''}</Text>
           </View>
+          <View style={styles.separator} />
+          <TouchableOpacity style={styles.row} onPress={handleOpenTrash}>
+            <Text style={styles.label}>Trash</Text>
+            <Text style={styles.value}>{'>'}</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
