@@ -5,6 +5,7 @@ import { UserProfile, NasConfig } from '../types/photo';
 class UserService {
   private static USER_PROFILE_KEY = '@photo_manage_user_profile';
   private static SESSION_KEY = '@photo_manage_session';
+  private static ONBOARDING_KEY = '@photo_manage_onboarding_seen';
 
   /**
    * Register a new user with local credentials
@@ -128,6 +129,21 @@ class UserService {
   static async getNasConfig(): Promise<NasConfig | null> {
     const profile = await this.loadUserProfile();
     return profile?.nasConfig || null;
+  }
+
+  /**
+   * Check if user has seen onboarding
+   */
+  static async hasSeenOnboarding(): Promise<boolean> {
+    const seen = await AsyncStorage.getItem(this.ONBOARDING_KEY);
+    return seen === 'true';
+  }
+
+  /**
+   * Mark onboarding as seen
+   */
+  static async setOnboardingSeen(): Promise<void> {
+    await AsyncStorage.setItem(this.ONBOARDING_KEY, 'true');
   }
 
   // Private helpers
