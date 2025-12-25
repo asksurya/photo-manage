@@ -213,3 +213,53 @@ jest.mock('@react-native-community/netinfo', () => ({
     isInternetReachable: true,
   })),
 }));
+
+// Mock react-native-maps
+jest.mock('react-native-maps', () => {
+  const React = require('react');
+  const { View, Text } = require('react-native');
+
+  const MockMapView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      animateToRegion: jest.fn(),
+      animateCamera: jest.fn(),
+      fitToCoordinates: jest.fn(),
+    }));
+    return React.createElement(View, { testID: props.testID || 'map-view', ...props }, props.children);
+  });
+  MockMapView.displayName = 'MapView';
+
+  const MockMarker = (props) => React.createElement(View, { testID: 'map-marker', ...props }, props.children);
+  MockMarker.displayName = 'Marker';
+
+  const MockCallout = (props) => React.createElement(View, { testID: 'map-callout', ...props }, props.children);
+  MockCallout.displayName = 'Callout';
+
+  const MockPolyline = (props) => React.createElement(View, { testID: 'map-polyline', ...props });
+  MockPolyline.displayName = 'Polyline';
+
+  const MockPolygon = (props) => React.createElement(View, { testID: 'map-polygon', ...props });
+  MockPolygon.displayName = 'Polygon';
+
+  const MockCircle = (props) => React.createElement(View, { testID: 'map-circle', ...props });
+  MockCircle.displayName = 'Circle';
+
+  return {
+    __esModule: true,
+    default: MockMapView,
+    Marker: MockMarker,
+    Callout: MockCallout,
+    Polyline: MockPolyline,
+    Polygon: MockPolygon,
+    Circle: MockCircle,
+    PROVIDER_GOOGLE: 'google',
+    PROVIDER_DEFAULT: null,
+  };
+});
+
+// Mock react-native-vector-icons
+jest.mock('react-native-vector-icons/Ionicons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return (props) => React.createElement(Text, { testID: `icon-${props.name}`, ...props }, props.name);
+});
