@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   PermissionsAndroid,
@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import PhotoService from '../services/PhotoService';
 import MetadataService from '../services/MetadataService';
 import CategorizationService, { CategoryGroup } from '../services/CategorizationService';
+import SearchService from '../services/SearchService';
 import SplitView from '../components/SplitView';
 import Header from '../components/Header';
 import CategoryTabs from '../components/CategoryTabs';
@@ -23,6 +24,7 @@ import PhotoGrid from '../components/PhotoGrid';
 import EmptyState from '../components/EmptyState';
 import LoadingIndicator from '../components/LoadingIndicator';
 import SelectionActionBar from '../components/SelectionActionBar';
+import SearchBar from '../components/SearchBar';
 import { useSelection } from '../contexts/SelectionContext';
 import { Photo, PhotoPair, CategoryType } from '../types/photo';
 
@@ -35,6 +37,8 @@ const GalleryScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'split'>('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredPhotos, setFilteredPhotos] = useState<Photo[]>([]);
   const { isSelectionMode } = useSelection();
 
   useEffect(() => {
@@ -57,6 +61,15 @@ const GalleryScreen: React.FC = () => {
       isMounted = false;
     };
   }, [photos]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const results = SearchService.searchByFilename(photos, searchQuery);
+      setFilteredPhotos(results);
+    } else {
+      setFilteredPhotos(photos);
+    }
+  }, [photos, searchQuery]);
 
   const requestPermissions = async () => {
     if (Platform.OS === 'ios') {
@@ -192,9 +205,19 @@ const GalleryScreen: React.FC = () => {
     Alert.alert('Coming Soon', 'Add to album feature will be implemented soon!');
   };
 
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('');
+  }, []);
+
   if (viewMode === 'split' && selectedPair) {
     return <SplitView pair={selectedPair} onBack={handleBackFromSplitView} />;
   }
+
+  const displayPhotos = searchQuery ? filteredPhotos : photos;
 
   const renderContent = () => {
     if (isLoading) {
@@ -204,29 +227,36 @@ const GalleryScreen: React.FC = () => {
       return <EmptyState />;
     }
     return (
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#007AFF"
-          />
-        }
-      >
-        {pairs.length > 0 && (
-          <PhotoPairList pairs={pairs} onPairPress={handlePairPress} />
-        )}
-        {categories && categories[selectedCategory] && categories[selectedCategory].length > 0 && (
-          <CategoryGroupList
-            categoryGroups={categories[selectedCategory]}
-            categoryType={selectedCategory}
-          />
-        )}
-        <PhotoGrid photos={photos} />
-      </ScrollView>
+      <>
+        <SearchBar
+          onSearch={handleSearch}
+          onClear={handleClearSearch}
+          placeholder="Search photos..."
+        />
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#007AFF"
+            />
+          }
+        >
+          {pairs.length > 0 && (
+            <PhotoPairList pairs={pairs} onPairPress={handlePairPress} />
+          )}
+          {categories && categories[selectedCategory] && categories[selectedCategory].length > 0 && (
+            <CategoryGroupList
+              categoryGroups={categories[selectedCategory]}
+              categoryType={selectedCategory}
+            />
+          )}
+          <PhotoGrid photos={displayPhotos} />
+        </ScrollView>
+      </>
     );
   };
 
