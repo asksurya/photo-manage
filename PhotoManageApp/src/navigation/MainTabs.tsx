@@ -1,7 +1,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import Icon from 'react-native-vector-icons/Ionicons';
 import GalleryScreen from '../screens/GalleryScreen';
+import MapScreen from '../screens/MapScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import NasConfigScreen from '../screens/NasConfigScreen';
 import TrashScreen from '../screens/TrashScreen';
@@ -11,6 +13,7 @@ import { Photo } from '../types/photo';
 
 type MainTabsParamList = {
   Gallery: undefined;
+  Map: undefined;
   Tags: undefined;
   Settings: undefined;
 };
@@ -92,6 +95,19 @@ const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
         component={GalleryScreen}
         options={{
           tabBarLabel: 'Gallery',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="images-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Map"
+        component={MapScreen}
+        options={{
+          tabBarLabel: 'Map',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="map-outline" size={size} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -99,12 +115,18 @@ const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
         component={TagsStackNavigator}
         options={{
           tabBarLabel: 'Tags',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="pricetags-outline" size={size} color={color} />
+          ),
         }}
       />
       <Tab.Screen
         name="Settings"
         options={{
           tabBarLabel: 'Settings',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="settings-outline" size={size} color={color} />
+          ),
         }}
       >
         {() => <SettingsStackNavigator onLogout={onLogout} />}
