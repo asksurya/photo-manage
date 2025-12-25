@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,11 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PhotoPair, Album, Photo } from '../types/photo';
+import { PhotoPair, Album, Photo, Tag } from '../types/photo';
 import PhotoService from '../services/PhotoService';
+import TagService from '../services/TagService';
 import VideoPlayer from './VideoPlayer';
+import TagPicker from './TagPicker';
 
 interface SplitViewProps {
   pair: PhotoPair;
@@ -28,6 +30,11 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
   const [jpegFavorite, setJpegFavorite] = useState(pair.jpeg?.isFavorite ?? false);
   const [videoPlayerVisible, setVideoPlayerVisible] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<Photo | null>(null);
+  const [tagPickerVisible, setTagPickerVisible] = useState(false);
+  const [photoTags, setPhotoTags] = useState<Tag[]>([]);
+
+  const photoIds = [pair.raw?.id, pair.jpeg?.id].filter(Boolean) as string[];
+  const selectedTagIds = pair.raw?.tagIds || pair.jpeg?.tagIds || [];
 
   useEffect(() => {
     if (modalVisible) {
@@ -35,9 +42,37 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
     }
   }, [modalVisible]);
 
+  useEffect(() => {
+    loadPhotoTags();
+  }, [pair]);
+
   const loadAlbums = async () => {
     const loadedAlbums = await PhotoService.getAlbums();
     setAlbums(loadedAlbums);
+  };
+
+  const loadPhotoTags = useCallback(async () => {
+    const tagIds = pair.raw?.tagIds || pair.jpeg?.tagIds || [];
+    if (tagIds.length > 0) {
+      const tags = await TagService.getTagsByIds(tagIds);
+      setPhotoTags(tags);
+    } else {
+      setPhotoTags([]);
+    }
+  }, [pair]);
+
+  const handleTagsUpdated = async () => {
+    // Reload photos to get updated tag information
+    const photos = await PhotoService.loadPhotos();
+    const updatedRaw = photos.find(p => p.id === pair.raw?.id);
+    const updatedJpeg = photos.find(p => p.id === pair.jpeg?.id);
+    const tagIds = updatedRaw?.tagIds || updatedJpeg?.tagIds || [];
+    if (tagIds.length > 0) {
+      const tags = await TagService.getTagsByIds(tagIds);
+      setPhotoTags(tags);
+    } else {
+      setPhotoTags([]);
+    }
   };
 
   const handleAddToAlbum = async (albumId: string) => {
@@ -272,10 +307,31 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
             {pair.pairingKey}
           </Text>
         </View>
-        <TouchableOpacity style={styles.addToAlbumButton} onPress={() => setModalVisible(true)}>
-          <Text style={styles.addToAlbumButtonText}>Add to Album</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.tagButton} onPress={() => setTagPickerVisible(true)}>
+            <Text style={styles.tagButtonText}>Tags</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addToAlbumButton} onPress={() => setModalVisible(true)}>
+            <Text style={styles.addToAlbumButtonText}>Album</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Tags Display */}
+      {photoTags.length > 0 && (
+        <View style={styles.tagsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScrollContent}>
+            {photoTags.map((tag) => (
+              <View key={tag.id} style={[styles.tagBadge, { backgroundColor: tag.color || '#007bff' }]}>
+                <Text style={styles.tagBadgeText}>{tag.name}</Text>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.addTagButton} onPress={() => setTagPickerVisible(true)}>
+              <Text style={styles.addTagButtonText}>+ Add</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
 
       {/* Content */}
       <ScrollView
@@ -350,6 +406,14 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
           }}
         />
       )}
+
+      <TagPicker
+        visible={tagPickerVisible}
+        onClose={() => setTagPickerVisible(false)}
+        photoIds={photoIds}
+        selectedTagIds={selectedTagIds}
+        onTagsUpdated={handleTagsUpdated}
+      />
     </SafeAreaView>
   );
 };
@@ -402,6 +466,21 @@ const styles = StyleSheet.create({
   headerRight: {
     width: 80,
   },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  tagButton: {
+    backgroundColor: '#6c757d',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  tagButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   addToAlbumButton: {
     backgroundColor: '#007bff',
     paddingVertical: 8,
@@ -410,7 +489,42 @@ const styles = StyleSheet.create({
   },
   addToAlbumButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tagsContainer: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9ECEF',
+  },
+  tagsScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tagBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  tagBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  addTagButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    borderStyle: 'dashed',
+  },
+  addTagButtonText: {
+    color: '#6c757d',
+    fontSize: 13,
     fontWeight: '600',
   },
   content: {

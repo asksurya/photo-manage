@@ -496,6 +496,106 @@ class PhotoService {
       throw new Error(`Failed to copy file from ${sourcePath} to ${destPath}`);
     }
   }
+
+  /**
+   * Tag Management
+   */
+
+  /**
+   * Add a tag to multiple photos
+   */
+  static async addTagToPhotos(tagId: string, photoIds: string[]): Promise<void> {
+    try {
+      const photos = await this.loadPhotos();
+      const photoIdSet = new Set(photoIds);
+      const updatedPhotos = photos.map((photo) => {
+        if (photoIdSet.has(photo.id)) {
+          const existingTagIds = photo.tagIds || [];
+          if (!existingTagIds.includes(tagId)) {
+            return { ...photo, tagIds: [...existingTagIds, tagId] };
+          }
+        }
+        return photo;
+      });
+      await this.savePhotos(updatedPhotos);
+    } catch (error) {
+      console.error('Error adding tag to photos:', error);
+      throw new Error('Failed to add tag to photos');
+    }
+  }
+
+  /**
+   * Remove a tag from multiple photos
+   */
+  static async removeTagFromPhotos(tagId: string, photoIds: string[]): Promise<void> {
+    try {
+      const photos = await this.loadPhotos();
+      const photoIdSet = new Set(photoIds);
+      const updatedPhotos = photos.map((photo) => {
+        if (photoIdSet.has(photo.id) && photo.tagIds) {
+          return { ...photo, tagIds: photo.tagIds.filter((id) => id !== tagId) };
+        }
+        return photo;
+      });
+      await this.savePhotos(updatedPhotos);
+    } catch (error) {
+      console.error('Error removing tag from photos:', error);
+      throw new Error('Failed to remove tag from photos');
+    }
+  }
+
+  /**
+   * Get all photos that have a specific tag
+   */
+  static async getPhotosByTag(tagId: string): Promise<Photo[]> {
+    try {
+      const photos = await this.loadPhotos();
+      return photos.filter((photo) => photo.tagIds?.includes(tagId));
+    } catch (error) {
+      console.error('Error getting photos by tag:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Remove a tag from all photos (used when deleting a tag)
+   */
+  static async removeTagFromAllPhotos(tagId: string): Promise<void> {
+    try {
+      const photos = await this.loadPhotos();
+      const updatedPhotos = photos.map((photo) => {
+        if (photo.tagIds?.includes(tagId)) {
+          return { ...photo, tagIds: photo.tagIds.filter((id) => id !== tagId) };
+        }
+        return photo;
+      });
+      await this.savePhotos(updatedPhotos);
+    } catch (error) {
+      console.error('Error removing tag from all photos:', error);
+      throw new Error('Failed to remove tag from all photos');
+    }
+  }
+
+  /**
+   * Get the count of photos for each tag
+   */
+  static async getPhotoCountByTags(): Promise<Map<string, number>> {
+    try {
+      const photos = await this.loadPhotos();
+      const countMap = new Map<string, number>();
+      for (const photo of photos) {
+        if (photo.tagIds) {
+          for (const tagId of photo.tagIds) {
+            countMap.set(tagId, (countMap.get(tagId) || 0) + 1);
+          }
+        }
+      }
+      return countMap;
+    } catch (error) {
+      console.error('Error getting photo count by tags:', error);
+      return new Map();
+    }
+  }
 }
 
 export default PhotoService;

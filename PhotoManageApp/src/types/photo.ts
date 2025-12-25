@@ -1,3 +1,9 @@
+export interface Tag {
+  id: string;
+  name: string;
+  color?: string;
+}
+
 export interface Photo {
   id: string;
   uri: string;
@@ -12,6 +18,7 @@ export interface Photo {
   mediaType?: 'photo' | 'video';
   duration?: number;
   thumbnailUri?: string;
+  tagIds?: string[];
   exif?: {
     DateTimeOriginal?: string;
     GPSLatitude?: number;
