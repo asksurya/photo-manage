@@ -137,11 +137,50 @@ jest.mock('@react-navigation/stack', () => ({
   }),
 }));
 
+// Mock react-native-keychain with service support
+const keychainStore = {};
 jest.mock('react-native-keychain', () => ({
-  setGenericPassword: jest.fn(() => Promise.resolve(true)),
-  getGenericPassword: jest.fn(() => Promise.resolve(false)),
-  resetGenericPassword: jest.fn(() => Promise.resolve(true)),
+  setGenericPassword: jest.fn((username, password, options) => {
+    const service = options?.service || 'default';
+    keychainStore[service] = { username, password };
+    return Promise.resolve(true);
+  }),
+  getGenericPassword: jest.fn((options) => {
+    const service = options?.service || 'default';
+    const creds = keychainStore[service];
+    if (creds) {
+      return Promise.resolve(creds);
+    }
+    return Promise.resolve(false);
+  }),
+  resetGenericPassword: jest.fn((options) => {
+    const service = options?.service || 'default';
+    delete keychainStore[service];
+    return Promise.resolve(true);
+  }),
 }));
+
+// Mock crypto-js for password hashing tests
+jest.mock('crypto-js', () => {
+  return {
+    lib: {
+      WordArray: {
+        random: jest.fn(() => ({
+          toString: jest.fn(() => 'mockedsalt1234567890abcdef'),
+        })),
+      },
+    },
+    enc: {
+      Hex: 'hex',
+    },
+    algo: {
+      SHA256: 'sha256',
+    },
+    PBKDF2: jest.fn((password, salt) => ({
+      toString: jest.fn(() => `pbkdf2hash_${password}_${salt}`),
+    })),
+  };
+});
 
 jest.mock(
   'react-native-blob-util',
