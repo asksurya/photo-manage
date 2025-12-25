@@ -47,6 +47,17 @@ const CategoryTabs: React.FC<CategoryTabsProps> = ({ selectedCategory, onSelectC
           By Content
         </Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.tab, selectedCategory === CategoryType.FAVORITES && styles.activeTab]}
+        onPress={() => onSelectCategory(CategoryType.FAVORITES)}
+      >
+        <Text style={[styles.tabIcon, selectedCategory === CategoryType.FAVORITES && styles.activeTabIcon]}>
+          ❤️
+        </Text>
+        <Text style={[styles.tabText, selectedCategory === CategoryType.FAVORITES && styles.activeTabText]}>
+          Favorites
+        </Text>
+      </TouchableOpacity>
     </ScrollView>
   </View>
 );

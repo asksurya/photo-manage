@@ -213,11 +213,26 @@ const GalleryScreen: React.FC = () => {
     setSearchQuery('');
   }, []);
 
+  const handleFavoriteToggle = useCallback((updatedPhoto: Photo) => {
+    setPhotos(prevPhotos =>
+      prevPhotos.map(p => (p.id === updatedPhoto.id ? updatedPhoto : p))
+    );
+  }, []);
+
   if (viewMode === 'split' && selectedPair) {
     return <SplitView pair={selectedPair} onBack={handleBackFromSplitView} />;
   }
 
-  const displayPhotos = searchQuery ? filteredPhotos : photos;
+  // Filter photos based on selected category and search query
+  const getDisplayPhotos = () => {
+    let result = searchQuery ? filteredPhotos : photos;
+    if (selectedCategory === CategoryType.FAVORITES) {
+      result = result.filter(p => p.isFavorite === true);
+    }
+    return result;
+  };
+
+  const displayPhotos = getDisplayPhotos();
 
   const renderContent = () => {
     if (isLoading) {
@@ -248,13 +263,13 @@ const GalleryScreen: React.FC = () => {
           {pairs.length > 0 && (
             <PhotoPairList pairs={pairs} onPairPress={handlePairPress} />
           )}
-          {categories && categories[selectedCategory] && categories[selectedCategory].length > 0 && (
+          {selectedCategory !== CategoryType.FAVORITES && categories && categories[selectedCategory] && categories[selectedCategory].length > 0 && (
             <CategoryGroupList
               categoryGroups={categories[selectedCategory]}
               categoryType={selectedCategory}
             />
           )}
-          <PhotoGrid photos={displayPhotos} />
+          <PhotoGrid photos={displayPhotos} onFavoriteToggle={handleFavoriteToggle} />
         </ScrollView>
       </>
     );
