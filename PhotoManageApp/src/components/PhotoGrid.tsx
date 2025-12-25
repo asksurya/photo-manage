@@ -1,39 +1,72 @@
 import React from 'react';
-import { View, Text, Image, FlatList, StyleSheet } from 'react-native';
+import { View, Text, Image, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { Photo } from '../types/photo';
+import { useSelection } from '../contexts/SelectionContext';
 
 interface PhotoGridProps {
   photos: Photo[];
+  onPhotoPress?: (photo: Photo) => void;
 }
 
-const PhotoGrid: React.FC<PhotoGridProps> = ({ photos }) => {
-  const renderPhotoItem = ({ item }: { item: Photo }) => (
-    <View style={styles.photoCard}>
-      <Image source={{ uri: item.uri }} style={styles.photoImage} />
-      <View style={styles.photoInfo}>
-        <Text style={styles.photoName} numberOfLines={1}>
-          {item.filename}
-        </Text>
-        <View style={styles.photoMetaRow}>
-          <Text style={styles.photoMeta}>
-            {item.width}×{item.height}
-          </Text>
-          <Text style={styles.photoDot}>•</Text>
-          <Text style={styles.photoMeta}>
-            {new Date(item.timestamp).toLocaleDateString()}
-          </Text>
+const PhotoGrid: React.FC<PhotoGridProps> = ({ photos, onPhotoPress }) => {
+  const { isSelectionMode, isSelected, toggleSelection, enterSelectionMode } = useSelection();
+
+  const handlePhotoPress = (photo: Photo) => {
+    if (isSelectionMode) {
+      toggleSelection(photo.id);
+    } else if (onPhotoPress) {
+      onPhotoPress(photo);
+    }
+  };
+
+  const handlePhotoLongPress = (photo: Photo) => {
+    enterSelectionMode();
+    toggleSelection(photo.id);
+  };
+
+  const renderPhotoItem = ({ item }: { item: Photo }) => {
+    const selected = isSelected(item.id);
+
+    return (
+      <TouchableOpacity
+        style={styles.photoCard}
+        onPress={() => handlePhotoPress(item)}
+        onLongPress={() => handlePhotoLongPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.photoImageContainer}>
+          <Image source={{ uri: item.uri }} style={styles.photoImage} />
+          {isSelectionMode && (
+            <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
+              {selected && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+          )}
         </View>
-        {item.exif?.GPSLatitude && item.exif?.GPSLongitude && (
-          <View style={styles.locationBadge}>
-            <Text style={styles.locationIcon}>📍</Text>
-            <Text style={styles.locationText}>
-              {item.exif.GPSLatitude.toFixed(4)}, {item.exif.GPSLongitude.toFixed(4)}
+        <View style={styles.photoInfo}>
+          <Text style={styles.photoName} numberOfLines={1}>
+            {item.filename}
+          </Text>
+          <View style={styles.photoMetaRow}>
+            <Text style={styles.photoMeta}>
+              {item.width}×{item.height}
+            </Text>
+            <Text style={styles.photoDot}>•</Text>
+            <Text style={styles.photoMeta}>
+              {new Date(item.timestamp).toLocaleDateString()}
             </Text>
           </View>
-        )}
-      </View>
-    </View>
-  );
+          {item.exif?.GPSLatitude && item.exif?.GPSLongitude && (
+            <View style={styles.locationBadge}>
+              <Text style={styles.locationIcon}>📍</Text>
+              <Text style={styles.locationText}>
+                {item.exif.GPSLatitude.toFixed(4)}, {item.exif.GPSLongitude.toFixed(4)}
+              </Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.section}>
@@ -97,11 +130,38 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  photoImageContainer: {
+    position: 'relative',
+    width: 72,
+    height: 72,
+  },
   photoImage: {
     width: 72,
     height: 72,
     borderRadius: 8,
     backgroundColor: '#F8F9FA',
+  },
+  checkbox: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   photoInfo: {
     flex: 1,

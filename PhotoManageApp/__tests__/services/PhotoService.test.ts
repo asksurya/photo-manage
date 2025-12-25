@@ -38,4 +38,39 @@ describe('PhotoService', () => {
     expect(pairs[0].jpeg).toEqual(photos[0]);
     expect(pairs[0].raw).toEqual(photos[1]);
   });
+
+  describe('deletePhotos', () => {
+    beforeEach(async () => {
+      await AsyncStorage.clear();
+    });
+
+    it('should delete single photo', async () => {
+      const mockPhotos = [
+        { id: '1', uri: 'file:///photo1.jpg', filename: 'photo1.jpg', timestamp: Date.now() },
+        { id: '2', uri: 'file:///photo2.jpg', filename: 'photo2.jpg', timestamp: Date.now() },
+      ];
+      await PhotoService.savePhotos(mockPhotos);
+
+      await PhotoService.deletePhotos(['1']);
+
+      const remaining = await PhotoService.loadPhotos();
+      expect(remaining.length).toBe(1);
+      expect(remaining[0].id).toBe('2');
+    });
+
+    it('should delete multiple photos', async () => {
+      const mockPhotos = [
+        { id: '1', uri: 'file:///photo1.jpg', filename: 'photo1.jpg', timestamp: Date.now() },
+        { id: '2', uri: 'file:///photo2.jpg', filename: 'photo2.jpg', timestamp: Date.now() },
+        { id: '3', uri: 'file:///photo3.jpg', filename: 'photo3.jpg', timestamp: Date.now() },
+      ];
+      await PhotoService.savePhotos(mockPhotos);
+
+      await PhotoService.deletePhotos(['1', '3']);
+
+      const remaining = await PhotoService.loadPhotos();
+      expect(remaining.length).toBe(1);
+      expect(remaining[0].id).toBe('2');
+    });
+  });
 });

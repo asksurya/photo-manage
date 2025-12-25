@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Modal, TextInput, Button } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Modal, TextInput, Button, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Header from '../components/Header';
 import PhotoService from '../services/PhotoService';
@@ -10,6 +10,9 @@ const AlbumsScreen: React.FC = () => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState('');
+  const [editingAlbum, setEditingAlbum] = useState<Album | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editedAlbumName, setEditedAlbumName] = useState('');
 
   useEffect(() => {
     loadAlbums();
@@ -35,11 +38,60 @@ const AlbumsScreen: React.FC = () => {
     navigation.navigate('AlbumPhotos', { albumName: album.name, photos });
   };
 
+  const handleEditAlbum = (album: Album) => {
+    setEditingAlbum(album);
+    setEditedAlbumName(album.name);
+    setEditModalVisible(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (editingAlbum && editedAlbumName.trim() !== '') {
+      await PhotoService.renameAlbum(editingAlbum.id, editedAlbumName.trim());
+      setEditModalVisible(false);
+      setEditingAlbum(null);
+      setEditedAlbumName('');
+      loadAlbums();
+    }
+  };
+
+  const handleDeleteAlbum = (album: Album) => {
+    Alert.alert(
+      'Delete Album',
+      `Are you sure you want to delete "${album.name}"?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await PhotoService.deleteAlbum(album.id);
+            loadAlbums();
+          },
+        },
+      ],
+    );
+  };
+
   const renderAlbum = ({ item }) => (
-    <TouchableOpacity style={styles.albumItem} onPress={() => handleAlbumPress(item)}>
-      <Text style={styles.albumName}>{item.name}</Text>
-      <Text style={styles.albumPhotoCount}>{item.photoIds.length} photos</Text>
-    </TouchableOpacity>
+    <View style={styles.albumItem}>
+      <TouchableOpacity style={styles.albumContent} onPress={() => handleAlbumPress(item)}>
+        <View>
+          <Text style={styles.albumName}>{item.name}</Text>
+          <Text style={styles.albumPhotoCount}>{item.photoIds.length} photos</Text>
+        </View>
+      </TouchableOpacity>
+      <View style={styles.albumActions}>
+        <TouchableOpacity style={styles.actionButton} onPress={() => handleEditAlbum(item)}>
+          <Text style={styles.actionIcon}>✏️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton} onPress={() => handleDeleteAlbum(item)}>
+          <Text style={styles.actionIcon}>🗑️</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 
   return (
@@ -78,6 +130,29 @@ const AlbumsScreen: React.FC = () => {
             <View style={styles.modalButtons}>
               <Button title="Cancel" onPress={() => setModalVisible(false)} color="#6c757d" />
               <Button title="Create" onPress={handleCreateAlbum} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={editModalVisible}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Edit Album</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Album Name"
+              value={editedAlbumName}
+              onChangeText={setEditedAlbumName}
+            />
+            <View style={styles.modalButtons}>
+              <Button title="Cancel" onPress={() => setEditModalVisible(false)} color="#6c757d" />
+              <Button title="Save" onPress={handleSaveEdit} />
             </View>
           </View>
         </View>
@@ -121,7 +196,6 @@ const styles = StyleSheet.create({
   },
   albumItem: {
     backgroundColor: '#FFFFFF',
-    padding: 16,
     borderRadius: 8,
     marginBottom: 12,
     shadowColor: '#000',
@@ -129,6 +203,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  albumContent: {
+    flex: 1,
+    padding: 16,
+  },
+  albumActions: {
+    flexDirection: 'row',
+    paddingRight: 8,
+  },
+  actionButton: {
+    padding: 8,
+    marginLeft: 4,
+  },
+  actionIcon: {
+    fontSize: 20,
   },
   albumName: {
     fontSize: 18,

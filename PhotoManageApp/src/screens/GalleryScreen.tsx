@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   PermissionsAndroid,
   Platform,
   Alert,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -13,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import PhotoService from '../services/PhotoService';
 import MetadataService from '../services/MetadataService';
 import CategorizationService, { CategoryGroup } from '../services/CategorizationService';
+import SearchService from '../services/SearchService';
 import SplitView from '../components/SplitView';
 import Header from '../components/Header';
 import CategoryTabs from '../components/CategoryTabs';
@@ -21,6 +23,9 @@ import CategoryGroupList from '../components/CategoryGroupList';
 import PhotoGrid from '../components/PhotoGrid';
 import EmptyState from '../components/EmptyState';
 import LoadingIndicator from '../components/LoadingIndicator';
+import SelectionActionBar from '../components/SelectionActionBar';
+import SearchBar from '../components/SearchBar';
+import { useSelection } from '../contexts/SelectionContext';
 import { Photo, PhotoPair, CategoryType } from '../types/photo';
 
 const GalleryScreen: React.FC = () => {
@@ -30,7 +35,11 @@ const GalleryScreen: React.FC = () => {
   const [selectedPair, setSelectedPair] = useState<PhotoPair | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>(CategoryType.DATE);
   const [isLoading, setIsLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'split'>('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredPhotos, setFilteredPhotos] = useState<Photo[]>([]);
+  const { isSelectionMode } = useSelection();
 
   useEffect(() => {
     requestPermissions();
@@ -52,6 +61,15 @@ const GalleryScreen: React.FC = () => {
       isMounted = false;
     };
   }, [photos]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const results = SearchService.searchByFilename(photos, searchQuery);
+      setFilteredPhotos(results);
+    } else {
+      setFilteredPhotos(photos);
+    }
+  }, [photos, searchQuery]);
 
   const requestPermissions = async () => {
     if (Platform.OS === 'ios') {
@@ -97,6 +115,22 @@ const GalleryScreen: React.FC = () => {
       Alert.alert('Error', 'Failed to load photos. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const loadedPhotos = await PhotoService.loadPhotos();
+      setPhotos(loadedPhotos);
+
+      const photoPairs = PhotoService.generatePairs(loadedPhotos);
+      setPairs(photoPairs);
+    } catch (error) {
+      console.error('Error refreshing photos:', error);
+      Alert.alert('Error', 'Failed to refresh photos. Please try again.');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -154,9 +188,36 @@ const GalleryScreen: React.FC = () => {
     setViewMode('list');
   };
 
+  const handleDeletePhotos = async (ids: string[]) => {
+    try {
+      await PhotoService.deletePhotos(ids);
+      // Reload photos after deletion
+      await loadPhotos();
+      Alert.alert('Success', `Deleted ${ids.length} photo(s) successfully!`);
+    } catch (error) {
+      console.error('Error deleting photos:', error);
+      Alert.alert('Error', 'Failed to delete photos. Please try again.');
+    }
+  };
+
+  const handleAddToAlbum = (_ids: string[]) => {
+    // TODO: Navigate to album picker or show modal
+    Alert.alert('Coming Soon', 'Add to album feature will be implemented soon!');
+  };
+
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('');
+  }, []);
+
   if (viewMode === 'split' && selectedPair) {
     return <SplitView pair={selectedPair} onBack={handleBackFromSplitView} />;
   }
+
+  const displayPhotos = searchQuery ? filteredPhotos : photos;
 
   const renderContent = () => {
     if (isLoading) {
@@ -166,22 +227,36 @@ const GalleryScreen: React.FC = () => {
       return <EmptyState />;
     }
     return (
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {pairs.length > 0 && (
-          <PhotoPairList pairs={pairs} onPairPress={handlePairPress} />
-        )}
-        {categories && categories[selectedCategory] && categories[selectedCategory].length > 0 && (
-          <CategoryGroupList
-            categoryGroups={categories[selectedCategory]}
-            categoryType={selectedCategory}
-          />
-        )}
-        <PhotoGrid photos={photos} />
-      </ScrollView>
+      <>
+        <SearchBar
+          onSearch={handleSearch}
+          onClear={handleClearSearch}
+          placeholder="Search photos..."
+        />
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#007AFF"
+            />
+          }
+        >
+          {pairs.length > 0 && (
+            <PhotoPairList pairs={pairs} onPairPress={handlePairPress} />
+          )}
+          {categories && categories[selectedCategory] && categories[selectedCategory].length > 0 && (
+            <CategoryGroupList
+              categoryGroups={categories[selectedCategory]}
+              categoryType={selectedCategory}
+            />
+          )}
+          <PhotoGrid photos={displayPhotos} />
+        </ScrollView>
+      </>
     );
   };
 
@@ -197,6 +272,12 @@ const GalleryScreen: React.FC = () => {
         onSelectCategory={setSelectedCategory}
       />
       {renderContent()}
+      {isSelectionMode && (
+        <SelectionActionBar
+          onDelete={handleDeletePhotos}
+          onAddToAlbum={handleAddToAlbum}
+        />
+      )}
     </SafeAreaView>
   );
 };

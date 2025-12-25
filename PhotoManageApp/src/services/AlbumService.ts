@@ -32,6 +32,15 @@ class AlbumService {
     await this.saveAlbums(albums);
   }
 
+  static async renameAlbum(albumId: string, newName: string): Promise<void> {
+    const albums = await this.getAlbums();
+    const album = albums.find(a => a.id === albumId);
+    if (album) {
+      album.name = newName;
+      await this.saveAlbums(albums);
+    }
+  }
+
   static async addPhotoToAlbum(albumId: string, photo: Photo): Promise<void> {
     const albums = await this.getAlbums();
     const album = albums.find(a => a.id === albumId);

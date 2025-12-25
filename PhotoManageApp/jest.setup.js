@@ -157,3 +157,12 @@ jest.mock(
   }),
   { virtual: true }
 );
+
+jest.mock('@react-native-community/netinfo', () => ({
+  addEventListener: jest.fn(() => jest.fn()),
+  fetch: jest.fn(() => Promise.resolve({
+    type: 'wifi',
+    isConnected: true,
+    isInternetReachable: true,
+  })),
+}));

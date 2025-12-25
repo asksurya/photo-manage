@@ -225,12 +225,44 @@ class PhotoService {
     await this.saveAlbums(updatedAlbums);
   }
 
+  static async renameAlbum(albumId: string, newName: string): Promise<void> {
+    const albums = await this.getAlbums();
+    const album = albums.find((a) => a.id === albumId);
+    if (album) {
+      album.name = newName;
+      await this.saveAlbums(albums);
+    }
+  }
+
   static async removePhotoFromAlbum(photoId: string, albumId: string): Promise<void> {
     const albums = await this.getAlbums();
     const album = albums.find((a) => a.id === albumId);
     if (album) {
       album.photoIds = album.photoIds.filter((id) => id !== photoId);
       await this.saveAlbums(albums);
+    }
+  }
+
+  /**
+   * Delete photos by their IDs
+   */
+  static async deletePhotos(photoIds: string[]): Promise<void> {
+    try {
+      const photos = await this.loadPhotos();
+      const idsToDelete = new Set(photoIds);
+      const remaining = photos.filter(p => !idsToDelete.has(p.id));
+      await this.savePhotos(remaining);
+
+      // Also remove from any albums
+      const albums = await this.getAlbums();
+      const updatedAlbums = albums.map(album => ({
+        ...album,
+        photoIds: album.photoIds.filter((id: string) => !idsToDelete.has(id)),
+      }));
+      await this.saveAlbums(updatedAlbums);
+    } catch (error) {
+      console.error('Error deleting photos:', error);
+      throw new Error('Failed to delete photos');
     }
   }
 
