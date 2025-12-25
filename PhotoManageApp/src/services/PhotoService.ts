@@ -61,22 +61,27 @@ class PhotoService {
    * Create a Photo object from an image picker asset
    */
   private static async createPhotoFromAsset(asset: any): Promise<Photo> {
-    const { uri, fileName, type, fileSize, width, height } = asset;
+    const { uri, fileName, type, fileSize, width, height, duration } = asset;
 
-    // Extract EXIF data
+    const filename = fileName || uri.split('/').pop() || 'unknown';
+    const isVideo = this.isVideoFile(filename);
+
+    // Extract EXIF data (only for photos, not videos)
     let exifData;
-    try {
-      exifData = await Exif.getExif(uri);
-    } catch (error) {
-      console.warn('Failed to extract EXIF data:', error);
+    if (!isVideo) {
+      try {
+        exifData = await Exif.getExif(uri);
+      } catch (error) {
+        console.warn('Failed to extract EXIF data:', error);
+      }
     }
 
     // Create photo object
     const photo: Photo = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       uri,
-      filename: fileName || uri.split('/').pop() || 'unknown',
-      type: type || 'image/jpeg',
+      filename,
+      type: type || (isVideo ? 'video/mp4' : 'image/jpeg'),
       size: fileSize || 0,
       width: width,
       height: height,
@@ -84,6 +89,9 @@ class PhotoService {
         ? new Date(exifData.DateTimeOriginal).getTime()
         : Date.now(),
       exif: exifData,
+      mediaType: isVideo ? 'video' : 'photo',
+      duration: isVideo ? (duration || 0) : undefined,
+      thumbnailUri: isVideo ? uri : undefined, // Use same URI as thumbnail placeholder
     };
 
     return photo;
@@ -155,6 +163,16 @@ class PhotoService {
     const extensions = ['.jpg', '.jpeg'];
     return extensions.some(ext =>
       photo.filename.toLowerCase().endsWith(ext)
+    );
+  }
+
+  /**
+   * Check if a file is a video based on extension
+   */
+  static isVideoFile(filename: string): boolean {
+    const videoExtensions = ['.mp4', '.mov', '.m4v'];
+    return videoExtensions.some(ext =>
+      filename.toLowerCase().endsWith(ext)
     );
   }
 

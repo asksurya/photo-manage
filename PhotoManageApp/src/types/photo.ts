@@ -7,6 +7,9 @@ export interface Photo {
   width?: number;
   height?: number;
   timestamp: number;
+  mediaType?: 'photo' | 'video';
+  duration?: number;
+  thumbnailUri?: string;
   exif?: {
     DateTimeOriginal?: string;
     GPSLatitude?: number;
