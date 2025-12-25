@@ -184,4 +184,228 @@ describe('UserService', () => {
       );
     });
   });
+
+  describe('Session expiration', () => {
+    it('should create session with expiration time', async () => {
+      await UserService.register('test@example.com', 'password123', 'Test User');
+
+      const isLoggedIn = await UserService.isLoggedIn();
+      expect(isLoggedIn).toBe(true);
+
+      const remaining = await UserService.getSessionTimeRemaining();
+      // Should be close to 24 hours (within a few seconds)
+      expect(remaining).toBeGreaterThan(23 * 60 * 60 * 1000);
+      expect(remaining).toBeLessThanOrEqual(24 * 60 * 60 * 1000);
+    });
+
+    it('should detect expired session', async () => {
+      await UserService.register('test@example.com', 'password123', 'Test User');
+
+      // Manually expire the session by setting expired timestamp
+      const sessionData = await AsyncStorage.getItem('@photo_manage_session');
+      const session = JSON.parse(sessionData!);
+      session.expiresAt = Date.now() - 1000; // Expired 1 second ago
+      await AsyncStorage.setItem('@photo_manage_session', JSON.stringify(session));
+
+      const isLoggedIn = await UserService.isLoggedIn();
+      expect(isLoggedIn).toBe(false);
+    });
+
+    it('should refresh session expiration', async () => {
+      await UserService.register('test@example.com', 'password123', 'Test User');
+
+      // Set session to expire in 1 hour
+      const sessionData = await AsyncStorage.getItem('@photo_manage_session');
+      const session = JSON.parse(sessionData!);
+      session.expiresAt = Date.now() + 60 * 60 * 1000; // 1 hour
+      await AsyncStorage.setItem('@photo_manage_session', JSON.stringify(session));
+
+      const refreshed = await UserService.refreshSession();
+      expect(refreshed).toBe(true);
+
+      const remaining = await UserService.getSessionTimeRemaining();
+      // Should now be close to 24 hours again
+      expect(remaining).toBeGreaterThan(23 * 60 * 60 * 1000);
+    });
+
+    it('should update last activity timestamp', async () => {
+      await UserService.register('test@example.com', 'password123', 'Test User');
+
+      const sessionBefore = await AsyncStorage.getItem('@photo_manage_session');
+      const lastActivityBefore = JSON.parse(sessionBefore!).lastActivityAt;
+
+      // Small delay to ensure timestamp difference
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      await UserService.updateLastActivity();
+
+      const sessionAfter = await AsyncStorage.getItem('@photo_manage_session');
+      const lastActivityAfter = JSON.parse(sessionAfter!).lastActivityAt;
+
+      expect(lastActivityAfter).toBeGreaterThanOrEqual(lastActivityBefore);
+    });
+  });
+
+  describe('Rate limiting', () => {
+    it('should allow login attempts within limit', async () => {
+      const status = await UserService.getRateLimitStatus();
+      expect(status.isLocked).toBe(false);
+      expect(status.attemptsRemaining).toBe(10);
+    });
+
+    it('should track failed login attempts', async () => {
+      // Set up mock to return invalid credentials
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+
+      // Make 5 failed attempts
+      for (let i = 0; i < 5; i++) {
+        try {
+          await UserService.login('wrong@example.com', 'wrongpass');
+        } catch {
+          // Expected to fail
+        }
+      }
+
+      const status = await UserService.getRateLimitStatus();
+      expect(status.attemptsRemaining).toBe(5);
+    });
+
+    it('should lock after 10 failed attempts', async () => {
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+
+      // Make 10 failed attempts
+      for (let i = 0; i < 10; i++) {
+        try {
+          await UserService.login('wrong@example.com', 'wrongpass');
+        } catch {
+          // Expected to fail
+        }
+      }
+
+      const status = await UserService.getRateLimitStatus();
+      expect(status.isLocked).toBe(true);
+      expect(status.unlockTime).not.toBeNull();
+    });
+
+    it('should reject login when locked', async () => {
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+
+      // Lock the account
+      for (let i = 0; i < 10; i++) {
+        try {
+          await UserService.login('wrong@example.com', 'wrongpass');
+        } catch {
+          // Expected to fail
+        }
+      }
+
+      // Next attempt should fail with rate limit message
+      await expect(UserService.login('any@example.com', 'anypass'))
+        .rejects.toThrow('Too many failed attempts');
+    });
+
+    it('should clear rate limit on successful login', async () => {
+      // First register
+      await UserService.register('test@example.com', 'password123', 'Test User');
+
+      // Get stored hash
+      const storedHash = (Keychain.setGenericPassword as jest.Mock).mock.calls[0][1];
+
+      // Simulate some failed attempts
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+      for (let i = 0; i < 3; i++) {
+        try {
+          await UserService.login('wrong@example.com', 'wrongpass');
+        } catch {
+          // Expected to fail
+        }
+      }
+
+      // Now successful login
+      (Keychain.getGenericPassword as jest.Mock).mockImplementation((options) => {
+        if (options?.service === 'com.photomanage.auth') {
+          return Promise.resolve({
+            username: 'test@example.com',
+            password: storedHash,
+          });
+        }
+        return Promise.resolve(false);
+      });
+
+      await UserService.login('test@example.com', 'password123');
+
+      const status = await UserService.getRateLimitStatus();
+      expect(status.isLocked).toBe(false);
+      expect(status.attemptsRemaining).toBe(10);
+    });
+  });
+
+  describe('Biometric authentication', () => {
+    it('should detect biometric availability', async () => {
+      const result = await UserService.isBiometricsAvailable();
+      expect(result.available).toBe(true);
+      expect(result.biometryType).toBe('FaceID');
+    });
+
+    it('should enable biometrics for user', async () => {
+      await UserService.register('test@example.com', 'password123', 'Test User');
+
+      const enabled = await UserService.enableBiometrics();
+      expect(enabled).toBe(true);
+
+      const isEnabled = await UserService.isBiometricsEnabled();
+      expect(isEnabled).toBe(true);
+    });
+
+    it('should disable biometrics for user', async () => {
+      await UserService.register('test@example.com', 'password123', 'Test User');
+      await UserService.enableBiometrics();
+
+      await UserService.disableBiometrics();
+
+      const isEnabled = await UserService.isBiometricsEnabled();
+      expect(isEnabled).toBe(false);
+    });
+
+    it('should login with biometrics when enabled', async () => {
+      await UserService.register('test@example.com', 'password123', 'Test User');
+      await UserService.enableBiometrics();
+      await UserService.logout();
+
+      // Mock getGenericPassword to return credentials (biometric auth success)
+      (Keychain.getGenericPassword as jest.Mock).mockImplementation((options) => {
+        if (options?.service === 'com.photomanage.auth') {
+          return Promise.resolve({
+            username: 'test@example.com',
+            password: 'somehash',
+          });
+        }
+        return Promise.resolve(false);
+      });
+
+      const profile = await UserService.loginWithBiometrics();
+      expect(profile.email).toBe('test@example.com');
+
+      const isLoggedIn = await UserService.isLoggedIn();
+      expect(isLoggedIn).toBe(true);
+    });
+
+    it('should reject biometric login when not enabled', async () => {
+      await UserService.register('test@example.com', 'password123', 'Test User');
+      // Don't enable biometrics
+
+      await expect(UserService.loginWithBiometrics())
+        .rejects.toThrow('Biometric authentication not enabled');
+    });
+
+    it('should fail gracefully when biometrics unavailable', async () => {
+      (Keychain.getSupportedBiometryType as jest.Mock).mockResolvedValue(null);
+
+      const result = await UserService.isBiometricsAvailable();
+      expect(result.available).toBe(false);
+
+      // Restore mock
+      (Keychain.getSupportedBiometryType as jest.Mock).mockResolvedValue('FaceID');
+    });
+  });
 });

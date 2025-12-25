@@ -12,10 +12,33 @@ const PBKDF2_ITERATIONS = 100000;
 const PBKDF2_KEY_SIZE = 256 / 32; // 256 bits
 const SALT_SIZE = 128 / 8; // 128 bits
 
+// Session configuration
+const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Rate limiting configuration
+const MAX_LOGIN_ATTEMPTS = 10;
+const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+const ATTEMPT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+
+// Types
+interface Session {
+  userId: string;
+  createdAt: number;
+  expiresAt: number;
+  lastActivityAt: number;
+}
+
+interface RateLimitState {
+  attempts: number;
+  firstAttemptAt: number;
+  lockedUntil: number;
+}
+
 class UserService {
   private static USER_PROFILE_KEY = '@photo_manage_user_profile';
   private static SESSION_KEY = '@photo_manage_session';
   private static ONBOARDING_KEY = '@photo_manage_onboarding_seen';
+  private static RATE_LIMIT_KEY = '@photo_manage_rate_limit';
 
   /**
    * Register a new user with local credentials
@@ -50,24 +73,35 @@ class UserService {
    * Login with email and password
    */
   static async login(email: string, password: string): Promise<UserProfile> {
+    // Check rate limiting first
+    const rateLimitCheck = await this.checkRateLimit();
+    if (!rateLimitCheck.allowed) {
+      throw new Error(rateLimitCheck.message || 'Account temporarily locked');
+    }
+
     const credentials = await Keychain.getGenericPassword({
       service: KEYCHAIN_SERVICE_AUTH,
     });
 
     if (!credentials || credentials.username !== email) {
+      await this.recordFailedAttempt();
       throw new Error('Invalid credentials');
     }
 
     const isValid = await this.verifyPassword(password, credentials.password);
     if (!isValid) {
+      await this.recordFailedAttempt();
       throw new Error('Invalid credentials');
     }
 
     const profile = await this.loadUserProfile();
     if (!profile) {
+      await this.recordFailedAttempt();
       throw new Error('Invalid credentials');
     }
 
+    // Clear rate limit on successful login
+    await this.clearRateLimit();
     await this.createSession(profile.id);
     return profile;
   }
@@ -80,20 +114,190 @@ class UserService {
   }
 
   /**
-   * Check if user has active session
+   * Check if user has active (non-expired) session
    */
   static async isLoggedIn(): Promise<boolean> {
-    const session = await AsyncStorage.getItem(this.SESSION_KEY);
-    return !!session;
+    const session = await this.getSession();
+    if (!session) {
+      return false;
+    }
+    if (this.isSessionExpired(session)) {
+      await this.logout();
+      return false;
+    }
+    return true;
   }
 
   /**
-   * Check if user is authenticated (has session and profile)
+   * Check if user is authenticated (has valid session and profile)
    */
   static async isAuthenticated(): Promise<boolean> {
-    const session = await AsyncStorage.getItem(this.SESSION_KEY);
+    const session = await this.getSession();
+    if (!session || this.isSessionExpired(session)) {
+      if (session) {
+        await this.logout();
+      }
+      return false;
+    }
     const profile = await this.loadUserProfile();
-    return !!(session && profile);
+    return !!profile;
+  }
+
+  /**
+   * Refresh session expiration (called after biometric auth)
+   */
+  static async refreshSession(): Promise<boolean> {
+    const session = await this.getSession();
+    if (!session) {
+      return false;
+    }
+    const now = Date.now();
+    session.expiresAt = now + SESSION_DURATION_MS;
+    session.lastActivityAt = now;
+    await AsyncStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
+    return true;
+  }
+
+  /**
+   * Update last activity timestamp
+   */
+  static async updateLastActivity(): Promise<void> {
+    const session = await this.getSession();
+    if (session && !this.isSessionExpired(session)) {
+      session.lastActivityAt = Date.now();
+      await AsyncStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
+    }
+  }
+
+  /**
+   * Get remaining session time in milliseconds
+   */
+  static async getSessionTimeRemaining(): Promise<number> {
+    const session = await this.getSession();
+    if (!session) {
+      return 0;
+    }
+    const remaining = session.expiresAt - Date.now();
+    return Math.max(0, remaining);
+  }
+
+  /**
+   * Get rate limit status for UI display
+   */
+  static async getRateLimitStatus(): Promise<{
+    isLocked: boolean;
+    attemptsRemaining: number;
+    unlockTime: number | null;
+  }> {
+    const state = await this.getRateLimitState();
+    const now = Date.now();
+
+    // Reset if window expired and not locked
+    if (state.lockedUntil <= now && state.firstAttemptAt > 0 && now - state.firstAttemptAt > ATTEMPT_WINDOW_MS) {
+      return { isLocked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS, unlockTime: null };
+    }
+
+    const isLocked = state.lockedUntil > now;
+    const attemptsRemaining = Math.max(0, MAX_LOGIN_ATTEMPTS - state.attempts);
+
+    return {
+      isLocked,
+      attemptsRemaining,
+      unlockTime: isLocked ? state.lockedUntil : null,
+    };
+  }
+
+  // Biometric authentication methods
+
+  /**
+   * Check if device supports biometric authentication
+   */
+  static async isBiometricsAvailable(): Promise<{ available: boolean; biometryType: string | null }> {
+    try {
+      const biometryType = await Keychain.getSupportedBiometryType();
+      return {
+        available: biometryType !== null,
+        biometryType: biometryType,
+      };
+    } catch {
+      return { available: false, biometryType: null };
+    }
+  }
+
+  /**
+   * Check if user has enabled biometric authentication
+   */
+  static async isBiometricsEnabled(): Promise<boolean> {
+    const profile = await this.loadUserProfile();
+    return profile?.biometricsEnabled === true;
+  }
+
+  /**
+   * Enable biometric authentication for current user
+   */
+  static async enableBiometrics(): Promise<boolean> {
+    const { available } = await this.isBiometricsAvailable();
+    if (!available) {
+      return false;
+    }
+
+    const profile = await this.loadUserProfile();
+    if (!profile) {
+      return false;
+    }
+
+    profile.biometricsEnabled = true;
+    await this.saveUserProfile(profile);
+    return true;
+  }
+
+  /**
+   * Disable biometric authentication for current user
+   */
+  static async disableBiometrics(): Promise<void> {
+    const profile = await this.loadUserProfile();
+    if (profile) {
+      profile.biometricsEnabled = false;
+      await this.saveUserProfile(profile);
+    }
+  }
+
+  /**
+   * Login using biometric authentication
+   */
+  static async loginWithBiometrics(): Promise<UserProfile> {
+    const { available, biometryType } = await this.isBiometricsAvailable();
+    if (!available) {
+      throw new Error('Biometric authentication not available');
+    }
+
+    const profile = await this.loadUserProfile();
+    if (!profile?.biometricsEnabled) {
+      throw new Error('Biometric authentication not enabled');
+    }
+
+    try {
+      // Retrieve credentials using biometric authentication
+      const credentials = await Keychain.getGenericPassword({
+        service: KEYCHAIN_SERVICE_AUTH,
+        authenticationPrompt: {
+          title: 'Authenticate',
+          subtitle: `Use ${biometryType || 'biometrics'} to login`,
+          cancel: 'Cancel',
+        },
+      });
+
+      if (!credentials) {
+        throw new Error('Biometric authentication failed');
+      }
+
+      // Biometric success - create/refresh session
+      await this.createSession(profile.id);
+      await this.clearRateLimit();
+      return profile;
+    } catch (error) {
+      throw new Error('Biometric authentication failed');
+    }
   }
 
   /**
@@ -204,10 +408,98 @@ class UserService {
     await AsyncStorage.setItem(this.ONBOARDING_KEY, 'true');
   }
 
-  // Private helpers
+  // Session helpers
   private static async createSession(userId: string): Promise<void> {
-    const session = { userId, createdAt: Date.now() };
+    const now = Date.now();
+    const session: Session = {
+      userId,
+      createdAt: now,
+      expiresAt: now + SESSION_DURATION_MS,
+      lastActivityAt: now,
+    };
     await AsyncStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
+  }
+
+  private static async getSession(): Promise<Session | null> {
+    try {
+      const sessionData = await AsyncStorage.getItem(this.SESSION_KEY);
+      if (sessionData) {
+        return JSON.parse(sessionData) as Session;
+      }
+    } catch {
+      // Invalid session data
+    }
+    return null;
+  }
+
+  private static isSessionExpired(session: Session): boolean {
+    return Date.now() > session.expiresAt;
+  }
+
+  // Rate limiting helpers
+  private static async getRateLimitState(): Promise<RateLimitState> {
+    try {
+      const data = await AsyncStorage.getItem(this.RATE_LIMIT_KEY);
+      if (data) {
+        return JSON.parse(data) as RateLimitState;
+      }
+    } catch {
+      // Invalid data
+    }
+    return { attempts: 0, firstAttemptAt: 0, lockedUntil: 0 };
+  }
+
+  private static async saveRateLimitState(state: RateLimitState): Promise<void> {
+    await AsyncStorage.setItem(this.RATE_LIMIT_KEY, JSON.stringify(state));
+  }
+
+  private static async checkRateLimit(): Promise<{ allowed: boolean; message?: string; unlockTime?: number }> {
+    const state = await this.getRateLimitState();
+    const now = Date.now();
+
+    // Check if locked
+    if (state.lockedUntil > now) {
+      return {
+        allowed: false,
+        message: 'Too many failed attempts. Please try again later.',
+        unlockTime: state.lockedUntil,
+      };
+    }
+
+    // Reset if window expired
+    if (state.firstAttemptAt > 0 && now - state.firstAttemptAt > ATTEMPT_WINDOW_MS) {
+      await this.clearRateLimit();
+      return { allowed: true };
+    }
+
+    return { allowed: true };
+  }
+
+  private static async recordFailedAttempt(): Promise<void> {
+    const state = await this.getRateLimitState();
+    const now = Date.now();
+
+    // Reset if window expired
+    if (state.firstAttemptAt > 0 && now - state.firstAttemptAt > ATTEMPT_WINDOW_MS) {
+      state.attempts = 0;
+      state.firstAttemptAt = 0;
+    }
+
+    state.attempts += 1;
+    if (state.firstAttemptAt === 0) {
+      state.firstAttemptAt = now;
+    }
+
+    // Lock if exceeded attempts
+    if (state.attempts >= MAX_LOGIN_ATTEMPTS) {
+      state.lockedUntil = now + LOCKOUT_DURATION_MS;
+    }
+
+    await this.saveRateLimitState(state);
+  }
+
+  private static async clearRateLimit(): Promise<void> {
+    await AsyncStorage.removeItem(this.RATE_LIMIT_KEY);
   }
 
   /**

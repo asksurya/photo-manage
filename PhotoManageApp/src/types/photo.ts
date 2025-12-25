@@ -41,6 +41,7 @@ export interface UserProfile {
   email: string;
   displayName: string;
   nasConfig?: NasConfig;
+  biometricsEnabled?: boolean;
 }
 
 export interface NasConfig {
