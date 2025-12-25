@@ -5,6 +5,7 @@ import {
   Platform,
   Alert,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -30,6 +31,7 @@ const GalleryScreen: React.FC = () => {
   const [selectedPair, setSelectedPair] = useState<PhotoPair | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>(CategoryType.DATE);
   const [isLoading, setIsLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'split'>('list');
 
   useEffect(() => {
@@ -97,6 +99,22 @@ const GalleryScreen: React.FC = () => {
       Alert.alert('Error', 'Failed to load photos. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const loadedPhotos = await PhotoService.loadPhotos();
+      setPhotos(loadedPhotos);
+
+      const photoPairs = PhotoService.generatePairs(loadedPhotos);
+      setPairs(photoPairs);
+    } catch (error) {
+      console.error('Error refreshing photos:', error);
+      Alert.alert('Error', 'Failed to refresh photos. Please try again.');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -170,6 +188,13 @@ const GalleryScreen: React.FC = () => {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#007AFF"
+          />
+        }
       >
         {pairs.length > 0 && (
           <PhotoPairList pairs={pairs} onPairPress={handlePairPress} />
