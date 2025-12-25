@@ -22,6 +22,8 @@ import CategoryGroupList from '../components/CategoryGroupList';
 import PhotoGrid from '../components/PhotoGrid';
 import EmptyState from '../components/EmptyState';
 import LoadingIndicator from '../components/LoadingIndicator';
+import SelectionActionBar from '../components/SelectionActionBar';
+import { useSelection } from '../contexts/SelectionContext';
 import { Photo, PhotoPair, CategoryType } from '../types/photo';
 
 const GalleryScreen: React.FC = () => {
@@ -33,6 +35,7 @@ const GalleryScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'split'>('list');
+  const { isSelectionMode } = useSelection();
 
   useEffect(() => {
     requestPermissions();
@@ -172,6 +175,23 @@ const GalleryScreen: React.FC = () => {
     setViewMode('list');
   };
 
+  const handleDeletePhotos = async (ids: string[]) => {
+    try {
+      await PhotoService.deletePhotos(ids);
+      // Reload photos after deletion
+      await loadPhotos();
+      Alert.alert('Success', `Deleted ${ids.length} photo(s) successfully!`);
+    } catch (error) {
+      console.error('Error deleting photos:', error);
+      Alert.alert('Error', 'Failed to delete photos. Please try again.');
+    }
+  };
+
+  const handleAddToAlbum = (ids: string[]) => {
+    // TODO: Navigate to album picker or show modal
+    Alert.alert('Coming Soon', 'Add to album feature will be implemented soon!');
+  };
+
   if (viewMode === 'split' && selectedPair) {
     return <SplitView pair={selectedPair} onBack={handleBackFromSplitView} />;
   }
@@ -222,6 +242,12 @@ const GalleryScreen: React.FC = () => {
         onSelectCategory={setSelectedCategory}
       />
       {renderContent()}
+      {isSelectionMode && (
+        <SelectionActionBar
+          onDelete={handleDeletePhotos}
+          onAddToAlbum={handleAddToAlbum}
+        />
+      )}
     </SafeAreaView>
   );
 };
