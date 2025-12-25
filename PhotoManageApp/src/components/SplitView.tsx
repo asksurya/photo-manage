@@ -11,17 +11,20 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PhotoPair, Album } from '../types/photo';
+import { PhotoPair, Album, Photo } from '../types/photo';
 import PhotoService from '../services/PhotoService';
 
 interface SplitViewProps {
   pair: PhotoPair;
   onBack: () => void;
+  onFavoriteToggle?: (photo: Photo) => void;
 }
 
-const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
+const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [rawFavorite, setRawFavorite] = useState(pair.raw?.isFavorite ?? false);
+  const [jpegFavorite, setJpegFavorite] = useState(pair.jpeg?.isFavorite ?? false);
 
   useEffect(() => {
     if (modalVisible) {
@@ -42,6 +45,21 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
       await PhotoService.addPhotoToAlbum(pair.jpeg.id, albumId);
     }
     setModalVisible(false);
+  };
+
+  const handleToggleFavorite = async (photo: Photo | undefined, isRaw: boolean) => {
+    if (!photo) return;
+    const updatedPhoto = await PhotoService.toggleFavorite(photo.id);
+    if (updatedPhoto) {
+      if (isRaw) {
+        setRawFavorite(updatedPhoto.isFavorite ?? false);
+      } else {
+        setJpegFavorite(updatedPhoto.isFavorite ?? false);
+      }
+      if (onFavoriteToggle) {
+        onFavoriteToggle(updatedPhoto);
+      }
+    }
   };
 
   const rawPhoto = pair.raw;
@@ -106,8 +124,11 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
   const renderPhotoSection = (
     photo: typeof rawPhoto,
     title: string,
-    badgeColor: string
+    badgeColor: string,
+    isRaw: boolean = false
   ) => {
+    const isFavorite = isRaw ? rawFavorite : jpegFavorite;
+
     if (!photo) {
       return (
         <View style={styles.photoSection}>
@@ -136,6 +157,15 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
           <Text style={styles.filename} numberOfLines={1}>
             {photo.filename}
           </Text>
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={() => handleToggleFavorite(photo, isRaw)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.favoriteIcon}>
+              {isFavorite ? '❤️' : '🤍'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Photo */}
@@ -207,7 +237,7 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
         </View>
 
         {/* RAW Photo */}
-        {renderPhotoSection(rawPhoto, 'RAW', '#FF6B6B')}
+        {renderPhotoSection(rawPhoto, 'RAW', '#FF6B6B', true)}
 
         {/* Divider */}
         {rawPhoto && jpegPhoto && (
@@ -221,7 +251,7 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack }) => {
         )}
 
         {/* JPEG Photo */}
-        {renderPhotoSection(jpegPhoto, 'JPEG', '#51CF66')}
+        {renderPhotoSection(jpegPhoto, 'JPEG', '#51CF66', false)}
 
         {/* Bottom spacing */}
         <View style={styles.bottomSpacing} />
@@ -381,6 +411,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#1A1A1A',
+  },
+  favoriteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  favoriteIcon: {
+    fontSize: 18,
   },
   photoContainer: {
     backgroundColor: '#000000',

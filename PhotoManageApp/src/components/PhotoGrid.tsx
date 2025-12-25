@@ -2,14 +2,24 @@ import React from 'react';
 import { View, Text, Image, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { Photo } from '../types/photo';
 import { useSelection } from '../contexts/SelectionContext';
+import PhotoService from '../services/PhotoService';
 
 interface PhotoGridProps {
   photos: Photo[];
   onPhotoPress?: (photo: Photo) => void;
+  onFavoriteToggle?: (photo: Photo) => void;
 }
 
-const PhotoGrid: React.FC<PhotoGridProps> = ({ photos, onPhotoPress }) => {
+const PhotoGrid: React.FC<PhotoGridProps> = ({ photos, onPhotoPress, onFavoriteToggle }) => {
   const { isSelectionMode, isSelected, toggleSelection, enterSelectionMode } = useSelection();
+
+  const handleFavoritePress = async (photo: Photo, event: any) => {
+    event.stopPropagation();
+    const updatedPhoto = await PhotoService.toggleFavorite(photo.id);
+    if (updatedPhoto && onFavoriteToggle) {
+      onFavoriteToggle(updatedPhoto);
+    }
+  };
 
   const handlePhotoPress = (photo: Photo) => {
     if (isSelectionMode) {
@@ -40,6 +50,17 @@ const PhotoGrid: React.FC<PhotoGridProps> = ({ photos, onPhotoPress }) => {
             <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
               {selected && <Text style={styles.checkmark}>✓</Text>}
             </View>
+          )}
+          {!isSelectionMode && (
+            <TouchableOpacity
+              style={styles.favoriteButton}
+              onPress={(e) => handleFavoritePress(item, e)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.favoriteIcon}>
+                {item.isFavorite ? '❤️' : '🤍'}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
         <View style={styles.photoInfo}>
@@ -162,6 +183,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  favoriteButton: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  favoriteIcon: {
+    fontSize: 16,
   },
   photoInfo: {
     flex: 1,

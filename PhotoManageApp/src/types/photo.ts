@@ -8,6 +8,7 @@ export interface Photo {
   height?: number;
   timestamp: number;
   deletedAt?: number;
+  isFavorite?: boolean;
   exif?: {
     DateTimeOriginal?: string;
     GPSLatitude?: number;
@@ -58,6 +59,7 @@ export enum CategoryType {
   DATE = 'date',
   LOCATION = 'location',
   CONTENT = 'content',
+  FAVORITES = 'favorites',
 }
 
 export interface Album {

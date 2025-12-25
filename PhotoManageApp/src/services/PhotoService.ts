@@ -386,6 +386,46 @@ class PhotoService {
   }
 
   /**
+   * Favorites Management
+   */
+
+  /**
+   * Toggle the favorite status of a photo
+   */
+  static async toggleFavorite(photoId: string): Promise<Photo | null> {
+    const photos = await this.loadPhotos();
+    const photo = photos.find(p => p.id === photoId);
+    if (!photo) {
+      return null;
+    }
+    photo.isFavorite = !photo.isFavorite;
+    await this.savePhotos(photos);
+    return photo;
+  }
+
+  /**
+   * Get all favorited photos
+   */
+  static async getFavorites(): Promise<Photo[]> {
+    const photos = await this.loadPhotos();
+    return photos.filter(p => p.isFavorite === true);
+  }
+
+  /**
+   * Set the favorite status of a photo explicitly
+   */
+  static async setFavorite(photoId: string, isFavorite: boolean): Promise<Photo | null> {
+    const photos = await this.loadPhotos();
+    const photo = photos.find(p => p.id === photoId);
+    if (!photo) {
+      return null;
+    }
+    photo.isFavorite = isFavorite;
+    await this.savePhotos(photos);
+    return photo;
+  }
+
+  /**
    * File Operations
    */
 
