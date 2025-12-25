@@ -4,9 +4,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import GalleryScreen from '../screens/GalleryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import NasConfigScreen from '../screens/NasConfigScreen';
+import TagsScreen from '../screens/TagsScreen';
+import TagPhotosScreen from '../screens/TagPhotosScreen';
+import { Photo } from '../types/photo';
 
 type MainTabsParamList = {
   Gallery: undefined;
+  Tags: undefined;
   Settings: undefined;
 };
 
@@ -15,9 +19,31 @@ type SettingsStackParamList = {
   NasConfig: undefined;
 };
 
+type TagsStackParamList = {
+  TagsHome: undefined;
+  TagPhotos: { tagName: string; tagId: string; photos: Photo[] };
+};
+
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
+const TagsStack = createNativeStackNavigator<TagsStackParamList>();
 
+const TagsStackNavigator: React.FC = () => {
+  return (
+    <TagsStack.Navigator>
+      <TagsStack.Screen
+        name="TagsHome"
+        component={TagsScreen}
+        options={{ headerShown: false }}
+      />
+      <TagsStack.Screen
+        name="TagPhotos"
+        component={TagPhotosScreen}
+        options={({ route }) => ({ title: route.params.tagName })}
+      />
+    </TagsStack.Navigator>
+  );
+};
 
 interface SettingsStackNavigatorProps {
   onLogout: () => void;
@@ -62,6 +88,13 @@ const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
         }}
       />
       <Tab.Screen
+        name="Tags"
+        component={TagsStackNavigator}
+        options={{
+          tabBarLabel: 'Tags',
+        }}
+      />
+      <Tab.Screen
         name="Settings"
         options={{
           tabBarLabel: 'Settings',
@@ -74,4 +107,4 @@ const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
 };
 
 export default MainTabs;
-export type { MainTabsParamList, SettingsStackParamList };
+export type { MainTabsParamList, SettingsStackParamList, TagsStackParamList };

@@ -1,3 +1,9 @@
+export interface Tag {
+  id: string;
+  name: string;
+  color?: string;
+}
+
 export interface Photo {
   id: string;
   uri: string;
@@ -7,6 +13,7 @@ export interface Photo {
   width?: number;
   height?: number;
   timestamp: number;
+  tagIds?: string[];
   exif?: {
     DateTimeOriginal?: string;
     GPSLatitude?: number;
