@@ -200,7 +200,7 @@ const GalleryScreen: React.FC = () => {
     }
   };
 
-  const handleAddToAlbum = (ids: string[]) => {
+  const handleAddToAlbum = (_ids: string[]) => {
     // TODO: Navigate to album picker or show modal
     Alert.alert('Coming Soon', 'Add to album feature will be implemented soon!');
   };
