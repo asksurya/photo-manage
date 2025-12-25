@@ -9,6 +9,9 @@ export interface Photo {
   timestamp: number;
   deletedAt?: number;
   isFavorite?: boolean;
+  mediaType?: 'photo' | 'video';
+  duration?: number;
+  thumbnailUri?: string;
   exif?: {
     DateTimeOriginal?: string;
     GPSLatitude?: number;

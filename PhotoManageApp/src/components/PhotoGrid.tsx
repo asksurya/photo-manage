@@ -34,8 +34,18 @@ const PhotoGrid: React.FC<PhotoGridProps> = ({ photos, onPhotoPress, onFavoriteT
     toggleSelection(photo.id);
   };
 
+  /**
+   * Format video duration from seconds to MM:SS format
+   */
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const renderPhotoItem = ({ item }: { item: Photo }) => {
     const selected = isSelected(item.id);
+    const isVideo = item.mediaType === 'video';
 
     return (
       <TouchableOpacity
@@ -45,7 +55,17 @@ const PhotoGrid: React.FC<PhotoGridProps> = ({ photos, onPhotoPress, onFavoriteT
         activeOpacity={0.7}
       >
         <View style={styles.photoImageContainer}>
-          <Image source={{ uri: item.uri }} style={styles.photoImage} />
+          <Image source={{ uri: item.thumbnailUri || item.uri }} style={styles.photoImage} />
+          {isVideo && (
+            <View style={styles.videoIndicator}>
+              <Text style={styles.playIcon}>▶</Text>
+            </View>
+          )}
+          {isVideo && item.duration !== undefined && item.duration > 0 && (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationText}>{formatDuration(item.duration)}</Text>
+            </View>
+          )}
           {isSelectionMode && (
             <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
               {selected && <Text style={styles.checkmark}>✓</Text>}
@@ -245,6 +265,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#4A90E2',
     fontWeight: '500',
+  },
+  videoIndicator: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 28,
+    height: 28,
+    marginTop: -14,
+    marginLeft: -14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playIcon: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    marginLeft: 2,
+  },
+  durationBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  durationText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });
 

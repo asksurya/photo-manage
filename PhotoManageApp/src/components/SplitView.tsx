@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PhotoPair, Album, Photo } from '../types/photo';
 import PhotoService from '../services/PhotoService';
+import VideoPlayer from './VideoPlayer';
 
 interface SplitViewProps {
   pair: PhotoPair;
@@ -25,6 +26,8 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
   const [albums, setAlbums] = useState<Album[]>([]);
   const [rawFavorite, setRawFavorite] = useState(pair.raw?.isFavorite ?? false);
   const [jpegFavorite, setJpegFavorite] = useState(pair.jpeg?.isFavorite ?? false);
+  const [videoPlayerVisible, setVideoPlayerVisible] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<Photo | null>(null);
 
   useEffect(() => {
     if (modalVisible) {
@@ -121,6 +124,24 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
     return metadata;
   };
 
+  /**
+   * Format video duration from seconds to MM:SS format
+   */
+  const formatDuration = (seconds?: number): string => {
+    if (!seconds) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  /**
+   * Handle play button press for videos
+   */
+  const handlePlayVideo = (photo: Photo) => {
+    setSelectedVideo(photo);
+    setVideoPlayerVisible(true);
+  };
+
   const renderPhotoSection = (
     photo: typeof rawPhoto,
     title: string,
@@ -146,6 +167,7 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
     }
 
     const metadata = formatMetadata(photo);
+    const isVideo = photo.mediaType === 'video';
 
     return (
       <View style={styles.photoSection}>
@@ -157,6 +179,11 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
           <Text style={styles.filename} numberOfLines={1}>
             {photo.filename}
           </Text>
+          {isVideo && (
+            <View style={styles.videoBadge}>
+              <Text style={styles.videoBadgeText}>VIDEO</Text>
+            </View>
+          )}
           <TouchableOpacity
             style={styles.favoriteButton}
             onPress={() => handleToggleFavorite(photo, isRaw)}
@@ -168,13 +195,31 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
           </TouchableOpacity>
         </View>
 
-        {/* Photo */}
+        {/* Photo or Video */}
         <View style={styles.photoContainer}>
-          <Image 
-            source={{ uri: photo.uri }} 
-            style={styles.photo} 
+          <Image
+            source={{ uri: photo.thumbnailUri || photo.uri }}
+            style={styles.photo}
             resizeMode="contain"
           />
+          {isVideo && (
+            <TouchableOpacity
+              style={styles.videoPlayOverlay}
+              onPress={() => handlePlayVideo(photo)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.playButtonLarge}>
+                <Text style={styles.playIconLarge}>▶</Text>
+              </View>
+              {photo.duration !== undefined && photo.duration > 0 && (
+                <View style={styles.videoDurationBadge}>
+                  <Text style={styles.videoDurationText}>
+                    {formatDuration(photo.duration)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Metadata */}
@@ -190,6 +235,19 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
                 </View>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* Video duration metadata */}
+        {isVideo && photo.duration !== undefined && photo.duration > 0 && (
+          <View style={styles.metadataContainer}>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataIcon}>⏱</Text>
+              <View style={styles.metadataContent}>
+                <Text style={styles.metadataLabel}>Duration</Text>
+                <Text style={styles.metadataValue}>{formatDuration(photo.duration)}</Text>
+              </View>
+            </View>
           </View>
         )}
       </View>
@@ -280,6 +338,18 @@ const SplitView: React.FC<SplitViewProps> = ({ pair, onBack, onFavoriteToggle })
           </View>
         </View>
       </Modal>
+
+      {/* Video Player Modal */}
+      {selectedVideo && (
+        <VideoPlayer
+          video={selectedVideo}
+          visible={videoPlayerVisible}
+          onClose={() => {
+            setVideoPlayerVisible(false);
+            setSelectedVideo(null);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -560,6 +630,51 @@ const styles = StyleSheet.create({
   },
   albumSelectItemText: {
     fontSize: 18,
+  },
+  videoBadge: {
+    backgroundColor: '#6C5CE7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  videoBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  videoPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButtonLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playIconLarge: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    marginLeft: 6,
+  },
+  videoDurationBadge: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  videoDurationText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
