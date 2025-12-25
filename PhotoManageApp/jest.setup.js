@@ -137,7 +137,7 @@ jest.mock('@react-navigation/stack', () => ({
   }),
 }));
 
-// Mock react-native-keychain with service support
+// Mock react-native-keychain with service support and biometrics
 const keychainStore = {};
 jest.mock('react-native-keychain', () => ({
   setGenericPassword: jest.fn((username, password, options) => {
@@ -158,6 +158,14 @@ jest.mock('react-native-keychain', () => ({
     delete keychainStore[service];
     return Promise.resolve(true);
   }),
+  getSupportedBiometryType: jest.fn(() => Promise.resolve('FaceID')),
+  ACCESS_CONTROL: {
+    BIOMETRY_ANY: 'BiometryAny',
+    BIOMETRY_ANY_OR_DEVICE_PASSCODE: 'BiometryAnyOrDevicePasscode',
+  },
+  AUTHENTICATION_TYPE: {
+    BIOMETRICS: 'AuthenticationWithBiometrics',
+  },
 }));
 
 // Mock crypto-js for password hashing tests
